@@ -16,17 +16,17 @@
 Theory ctree
 Ancestors
   arithmetic list llist alist option pred_set relation pair
-  combin itree companion fixedPoint set_relation
+  combin companion fixedPoint set_relation
 Libs
   term_tactic mp_then
 
-(* Type definition *)
+(* --- Type definition --- *)
 
 Datatype:
   ctree_el = Event 'e | Return 'r | Silence | Branch
 End
 
-Type ctree_rep[local] = “:(('a + 'b) option) list -> ('e,'r) ctree_el”;
+Type ctree_rep[local] = “:('a + 'b) option list -> ('e,'r) ctree_el”;
 val f = “(f: ('a,'b,'e,'r) ctree_rep)”
 
 Definition path_ok_def:
@@ -60,7 +60,7 @@ val repabs_fns = define_new_type_bijections
     REP  = "ctree_rep",
     tyax = ctree_tydef};
 
-(* rep and abs theorems *)
+(* --- rep and abs theorems --- *)
 
 val ctree_absrep = CONJUNCT1 repabs_fns
 val ctree_repabs = CONJUNCT2 repabs_fns
@@ -82,4 +82,24 @@ Theorem ctree_rep_11[local]:
   (ctree_rep t1 = ctree_rep t2) = (t1 = t2)
 Proof
   metis_tac[ctree_absrep]
+QED
+
+(* --- Constructors --- *)
+
+(* Ret *)
+Definition Ret_rep_def:
+  Ret_rep (x: 'r) =
+    λpath. if path = [] then Return x else Silence
+End
+
+Definition Ret_def:
+  Ret x = ctree_abs (Ret_rep x)
+End
+
+Theorem ctree_rep_ok_Ret[local]:
+  ∀x. ctree_rep_ok (Ret_rep x)
+Proof
+  rw [ctree_rep_ok_def, Ret_rep_def, path_ok_def] 
+  >> `xs ++ [y] ++ ys ≠ []` suffices_by rw[]
+  >> Cases_on `xs` >> rw[APPEND]
 QED
