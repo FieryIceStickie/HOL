@@ -18,7 +18,7 @@ Ancestors
   arithmetic list llist alist option pred_set relation pair
   combin companion fixedPoint set_relation
 Libs
-  term_tactic mp_then
+  term_tactic mp_then BasicProvers dep_rewrite
 
 (* --- Type definition --- *)
 
@@ -35,8 +35,8 @@ Definition path_ok_def:
       case f xs of
       | Return _ => F                       (* a path cannot continue past a Return *)
       | Silence  => y = NONE                (* Silence consumes no input *)
-      | Branch   => ∃b. y = SOME $ INR b    (* Branch should be a branch *)
-      | Event e  => ∃a. y = SOME $ INL a    (* the next element must be an input *)
+      | Branch   => ∃b. y = SOME (INR b)    (* Branch should be a branch *)
+      | Event e  => ∃a. y = SOME (INL a)    (* the next element must be an input *)
 End
 
 Definition ctree_rep_ok_def:
@@ -99,7 +99,7 @@ End
 Theorem ctree_rep_ok_Ret[local]:
   ∀x. ctree_rep_ok (Ret_rep x)
 Proof
-  rw [ctree_rep_ok_def, Ret_rep_def, path_ok_def] 
+  rw [ctree_rep_ok_def, Ret_rep_def, path_ok_def]
   >> `xs ++ [y] ++ ys ≠ []` suffices_by rw[]
   >> Cases_on `xs` >> rw[APPEND]
 QED
@@ -108,7 +108,7 @@ QED
 Definition Tau_rep_def:
   Tau_rep ^f =
     λpath. case path of
-           | (NONE::rest) => f rest
+           | NONE::rest => f rest
            | _ => Silence
 End
 
@@ -119,14 +119,47 @@ End
 Theorem ctree_rep_ok_Tau[local]:
   ∀f. ctree_rep_ok f ==> ctree_rep_ok (Tau_rep ^f)
 Proof
-  rw [ctree_rep_ok_def, Tau_rep_def]
+  rw[ctree_rep_ok_def, Tau_rep_def]
   >> Cases_on `∃r. path = NONE::r` >> rw[]
   >- (
-    (* Interesting branch where path doesn't immediately fail Tau_rep *)
     fs[path_ok_def]
-    >> Cases_on `path` >> gvs[]
-    >> rename [`xs ++ [y] ++ ys`]
-    >- (first_x_assum $ qspec_then `xs ++ [y] ++ ys` mp_tac >> metis_tac[])
+    >> full_case_tac >> gvs[]
+    >> rename[`xs ++ [y] ++ ys`]
+    >> first_x_assum $ qspec_then `xs ++ [y] ++ ys` mp_tac 
+    >> metis_tac[]
   )
   >> rpt (case_tac >> fs[])
 QED
+
+(* Vis *)
+Definition Vis_rep_def:
+  Vis_rep e k =
+    λpath. case path of
+           | [] => Event e
+           | SOME (INL a)::rest => k a rest
+           | _ => Silence
+End
+
+Definition Vis_def:
+  Vis e k = ctree_abs $ Vis_rep e (ctree_rep o k)
+End
+
+Theorem ctree_rep_ok_Vis[local]:
+  ∀k. (∀a. ctree_rep_ok (k a)) ==> ctree_rep_ok (Vis_rep e k)
+Proof
+  rw[ctree_rep_ok_def, Vis_rep_def]
+  >> Cases_on `path = [] ∨ ∃x r. path = (SOME $ INL x)::r` >> fs[]
+  >- fs[path_ok_def]
+  >- (
+    fs[path_ok_def]
+    >> full_case_tac >> gvs[]
+    >> rename[`xs ++ [y] ++ ys`]
+    >> first_x_assum $ qspecl_then [`x`,`xs ++ [y] ++ ys`] mp_tac
+    >> metis_tac[]
+  )
+  >> rpt (case_tac >> fs[])
+QED
+
+
+
+
