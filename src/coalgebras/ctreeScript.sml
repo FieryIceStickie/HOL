@@ -103,3 +103,30 @@ Proof
   >> `xs ++ [y] ++ ys ≠ []` suffices_by rw[]
   >> Cases_on `xs` >> rw[APPEND]
 QED
+
+(* Tau *)
+Definition Tau_rep_def:
+  Tau_rep ^f =
+    λpath. case path of
+           | (NONE::rest) => f rest
+           | _ => Silence
+End
+
+Definition Tau_def:
+  Tau t = ctree_abs $ Tau_rep (ctree_rep t)
+End
+
+Theorem ctree_rep_ok_Tau[local]:
+  ∀f. ctree_rep_ok f ==> ctree_rep_ok (Tau_rep ^f)
+Proof
+  rw [ctree_rep_ok_def, Tau_rep_def]
+  >> Cases_on `∃r. path = NONE::r` >> rw[]
+  >- (
+    (* Interesting branch where path doesn't immediately fail Tau_rep *)
+    fs[path_ok_def]
+    >> Cases_on `path` >> gvs[]
+    >> rename [`xs ++ [y] ++ ys`]
+    >- (first_x_assum $ qspec_then `xs ++ [y] ++ ys` mp_tac >> metis_tac[])
+  )
+  >> rpt (case_tac >> fs[])
+QED
