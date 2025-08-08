@@ -13,6 +13,7 @@
     |  Vis 'e ('a -> ctree)  --  visible event 'e with answer 'a, then continue based on answer
     |  Br  ('b -> ctree)     --  branching based on 'b
 *)
+
 Theory ctree
 Ancestors
   arithmetic list llist alist option pred_set relation pair
@@ -65,8 +66,8 @@ val repabs_fns = define_new_type_bijections
 val ctree_absrep = CONJUNCT1 repabs_fns
 val ctree_repabs = CONJUNCT2 repabs_fns
 
-Theorem ctree_rep_ok_ctree_rep[local,simp]:
-  ∀t. ctree_rep_ok (ctree_rep t)
+Theorem ctree_rep_ok_ctree_rep[local, simp]:
+  ∀t. ctree_rep_ok $ ctree_rep t
 Proof
   fs [ctree_repabs, ctree_absrep]
 QED
@@ -104,6 +105,20 @@ Proof
   >> gvs[path_ok_def]
 QED
 
+Theorem Ret_rep_11[local]:
+  ∀x y. Ret_rep x = Ret_rep y <=> x = y
+Proof
+  rw[Ret_rep_def, FUN_EQ_THM] >> eq_tac >> rw[]
+  >> first_x_assum $ qspec_then `[]` mp_tac
+  >> rw[]
+QED
+
+Theorem Ret_11:
+  ∀x y. Ret x = Ret y <=> x = y
+Proof
+  metis_tac[Ret_def, ctree_rep_ok_Ret, ctree_abs_11, ctree_rep_11, Ret_rep_11]
+QED
+
 (* Tau *)
 Definition Tau_rep_def:
   Tau_rep ^f =
@@ -125,10 +140,26 @@ Proof
   >- (
     full_case_tac >> gvs[]
     >> rename[`xs ++ [y] ++ ys`]
-    >> first_x_assum $ qspec_then `xs ++ [y] ++ ys` mp_tac 
+    >> first_x_assum $ qspec_then `xs ++ [y] ++ ys` mp_tac
     >> metis_tac[]
   )
   >> rpt (case_tac >> fs[])
+QED
+
+Theorem Tau_rep_11[local]:
+  ∀x y. Tau_rep x = Tau_rep y <=> x = y
+Proof
+  rw[Tau_rep_def, FUN_EQ_THM] >> eq_tac >> rw[]
+  >> rename[`x r = y r`]
+  >> first_x_assum $ qspec_then `NONE::r` mp_tac
+  >> rw[]
+QED
+
+Theorem Tau_11:
+  ∀x y. Tau x = Tau y <=> x = y
+Proof
+  metis_tac[Tau_def, ctree_rep_ok_ctree_rep, ctree_rep_ok_Tau,
+            ctree_abs_11, ctree_rep_11, Tau_rep_11]
 QED
 
 (* Vis *)
@@ -159,6 +190,29 @@ Proof
   >> rpt (case_tac >> fs[])
 QED
 
+Theorem Vis_rep_11[local]:
+  ∀x y g k. Vis_rep x g = Vis_rep y k <=> x = y ∧ g = k
+Proof
+  rw[Vis_rep_def, FUN_EQ_THM] >> eq_tac >> rw[]
+  >| [
+    first_x_assum $ qspec_then `[]` mp_tac,
+    rename[`g a r = k a r`]
+    >> first_x_assum $ qspec_then `SOME (INL a)::r` mp_tac
+  ] >> rw[]
+QED
+
+Theorem Vis_11:
+  ∀x y g k. Vis x g = Vis y k <=> x = y ∧ g = k
+Proof
+  rw[Vis_def] >> eq_tac
+  >> qmatch_goalsub_abbrev_tac `ctree_abs v1 = ctree_abs v2`
+  >> `ctree_rep_ok v1 ∧ ctree_rep_ok v2` by (unabbrev_all_tac >> fs[ctree_rep_ok_Vis])
+  >> unabbrev_all_tac >> rw[]
+  >> rev_dxrule_all ctree_abs_11
+  >> rw[Vis_rep_11, ctree_rep_ok_ctree_rep, FUN_EQ_THM]
+  >> metis_tac[ctree_rep_11]
+QED
+
 (* Br *)
 Definition Br_rep_def:
   Br_rep k =
@@ -172,7 +226,7 @@ Definition Br_def:
   Br k = ctree_abs $ Br_rep (ctree_rep o k)
 End
 
-Theorem ctree_rep_ok_Br:
+Theorem ctree_rep_ok_Br[local]:
   ∀k. (∀b. ctree_rep_ok (k b)) ==> ctree_rep_ok (Br_rep k)
 Proof
   rw[ctree_rep_ok_def, Br_rep_def]
@@ -186,3 +240,49 @@ Proof
   )
   >> rpt (case_tac >> fs[])
 QED
+
+Theorem Br_rep_11[local]:
+  ∀g k. Br_rep g = Br_rep k <=> g = k
+Proof
+  rw[Br_rep_def, FUN_EQ_THM] >> eq_tac >> rw[]
+  >> rename[`g a r = k a r`]
+  >> first_x_assum $ qspec_then `SOME (INR a)::r` mp_tac
+  >> rw[]
+QED
+
+Theorem Br_11:
+  ∀g k. Br g = Br k <=> g = k
+Proof
+  rw[Br_def] >> eq_tac
+  >> qmatch_goalsub_abbrev_tac `ctree_abs v1 = ctree_abs v2`
+  >> `ctree_rep_ok v1 ∧ ctree_rep_ok v2` by (unabbrev_all_tac >> fs[ctree_rep_ok_Br])
+  >> unabbrev_all_tac >> rw[]
+  >> rev_dxrule_all ctree_abs_11
+  >> rw[Br_rep_11, ctree_rep_ok_ctree_rep, FUN_EQ_THM]
+  >> metis_tac[ctree_rep_11]
+QED
+
+Theorem ctree_11 = LIST_CONJ [Ret_11, Tau_11, Vis_11, Br_11];
+
+Theorem ctree_rep_ok_All[local] =
+  LIST_CONJ [ctree_rep_ok_Ret, ctree_rep_ok_Tau, ctree_rep_ok_Vis, ctree_rep_ok_Br];
+
+Theorem All_def[local] = LIST_CONJ [Ret_def, Tau_def, Vis_def, Br_def];
+Theorem All_rep_def[local] = LIST_CONJ [Ret_rep_def, Tau_rep_def, Vis_rep_def, Br_rep_def];
+
+(* Distinctness *)
+Theorem ctree_distinct_lemma[local]:
+  ALL_DISTINCT [Ret x; Tau t; Vis e g; Br k]
+Proof
+  rw[ALL_DISTINCT, All_def]
+  >> qmatch_goalsub_abbrev_tac `ctree_abs v1 = ctree_abs v2`
+  >> `v1 ≠ v2` suffices_by (
+    `ctree_rep_ok v1 ∧ ctree_rep_ok v2` by (unabbrev_all_tac >> fs[ctree_rep_ok_All])
+    >> rw[ctree_abs_11]
+  ) >> unabbrev_all_tac 
+  >> rw[All_rep_def, FUN_EQ_THM]
+  >> qexists_tac `[]` >> rw[]
+QED
+
+Theorem ctree_distinct =
+  ctree_distinct_lemma |> SIMP_RULE std_ss [ALL_DISTINCT, MEM, GSYM CONJ_ASSOC];
