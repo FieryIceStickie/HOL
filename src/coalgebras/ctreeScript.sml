@@ -148,7 +148,7 @@ Theorem ctree_rep_ok_Vis[local]:
   ∀k. (∀a. ctree_rep_ok (k a)) ==> ctree_rep_ok (Vis_rep e k)
 Proof
   rw[ctree_rep_ok_def, Vis_rep_def]
-  >> Cases_on `path = [] ∨ ∃x r. path = (SOME $ INL x)::r` >> fs[]
+  >> Cases_on `path = [] ∨ ∃x r. path = SOME (INL x)::r` >> fs[]
   >- fs[path_ok_def]
   >- (
     fs[path_ok_def]
@@ -160,6 +160,31 @@ Proof
   >> rpt (case_tac >> fs[])
 QED
 
+(* Br *)
+Definition Br_rep_def:
+  Br_rep k =
+    λpath. case path of
+           | [] => Branch
+           | SOME (INR b)::rest => k b rest
+           | _ => Silence
+End
 
+Definition Br_def:
+  Br k = ctree_abs $ Br_rep (ctree_rep o k)
+End
 
-
+Theorem ctree_rep_ok_Br:
+  ∀k. (∀b. ctree_rep_ok (k b)) ==> ctree_rep_ok (Br_rep k)
+Proof
+  rw[ctree_rep_ok_def, Br_rep_def]
+  >> Cases_on `path = [] ∨ ∃x r. path = SOME (INR x)::r` >> fs[]
+  >- fs[path_ok_def]
+  >- (
+    fs[path_ok_def]
+    >> full_case_tac >> gvs[]
+    >> rename[`xs ++ [y] ++ ys`]
+    >> first_x_assum $ qspecl_then [`x`,`xs ++ [y] ++ ys`] mp_tac
+    >> metis_tac[]
+  )
+  >> rpt (case_tac >> fs[])
+End
