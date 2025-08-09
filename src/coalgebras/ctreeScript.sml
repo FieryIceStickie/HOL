@@ -24,7 +24,7 @@ Libs
 (* --- Type definition --- *)
 
 Datatype:
-  ctree_el = Event 'e | Return 'r | Silence | Branch
+  ctree_el = Return 'r | Silence | Event 'e | Branch
 End
 
 Type ctree_rep[local] = “:('a + 'b) option list -> ('e,'r) ctree_el”;
@@ -176,7 +176,7 @@ Definition Vis_def:
 End
 
 Theorem ctree_rep_ok_Vis[local]:
-  ∀k. (∀a. ctree_rep_ok (k a)) ==> ctree_rep_ok (Vis_rep e k)
+  ∀e k. (∀a. ctree_rep_ok (k a)) ==> ctree_rep_ok (Vis_rep e k)
 Proof
   rw[ctree_rep_ok_def, Vis_rep_def]
   >> Cases_on `path = [] ∨ ∃x r. path = SOME (INL x)::r`
@@ -264,11 +264,40 @@ QED
 
 Theorem ctree_11 = LIST_CONJ [Ret_11, Tau_11, Vis_11, Br_11];
 
+(* A few useful lemmas *)
 Theorem ctree_rep_ok_All[local] =
   LIST_CONJ [ctree_rep_ok_Ret, ctree_rep_ok_Tau, ctree_rep_ok_Vis, ctree_rep_ok_Br];
 
 Theorem All_def[local] = LIST_CONJ [Ret_def, Tau_def, Vis_def, Br_def];
+
 Theorem All_rep_def[local] = LIST_CONJ [Ret_rep_def, Tau_rep_def, Vis_rep_def, Br_rep_def];
+
+Theorem ctree_rep_ok_cons[local]:
+  ctree_rep_ok f ==> ∀v. ctree_rep_ok $ λpath. f (v::path)
+Proof
+  rw[ctree_rep_ok_def]
+  >> first_x_assum $ qspec_then `v::path` strip_assume_tac
+  >> first_x_assum irule
+  >> gvs[path_ok_def]
+  >> rename[`v::(xs ++ [y] ++ ys)`]
+  >> qexistsl[`v::xs`,`y`,`ys`]
+  >> rw[]
+QED
+
+Theorem path_not_ok_imp_silence[local]:
+  (ctree_rep_ok f) ∧
+    (¬case f [] of
+       Return r => F
+     | Silence  => v = NONE
+     | Event e  => ∃a. v = SOME (INL a)
+     | Branch   => ∃b. v = SOME (INR b))
+  ==> f (v::t) = Silence
+Proof
+  rw[ctree_rep_ok_def, path_ok_def]
+  >> first_x_assum $ qspec_then `v::t` strip_assume_tac
+  >> first_x_assum irule
+  >> qexistsl[`[]`,`v`,`t`] >> rw[]
+QED
 
 (* Distinctness *)
 Theorem ctree_distinct_lemma[local]:
@@ -279,10 +308,38 @@ Proof
   >> `v1 ≠ v2` suffices_by (
     `ctree_rep_ok v1 ∧ ctree_rep_ok v2` by (unabbrev_all_tac >> fs[ctree_rep_ok_All])
     >> rw[ctree_abs_11]
-  ) >> unabbrev_all_tac 
+  ) >> unabbrev_all_tac
   >> rw[All_rep_def, FUN_EQ_THM]
   >> qexists_tac `[]` >> rw[]
 QED
 
 Theorem ctree_distinct =
   ctree_distinct_lemma |> SIMP_RULE std_ss [ALL_DISTINCT, MEM, GSYM CONJ_ASSOC];
+
+Theorem ctree_rep_cases[local]:
+  ctree_rep_ok f ==>
+      (∃r  . f = Ret_rep r                           )
+    ∨ (∃u  . f = Tau_rep u   ∧     ctree_rep_ok u    )
+    ∨ (∃e g. f = Vis_rep e g ∧ ∀a. ctree_rep_ok $ g a)
+    ∨ (∃k  . f = Br_rep  k   ∧ ∀b. ctree_rep_ok $ k b)
+Proof
+  rw[Once ctree_rep_ok_def, path_ok_def]
+  >> Cases_on `f []`
+  >> rw[All_rep_def, FUN_EQ_THM]
+  >| [
+    (* Return *)
+    disj1_tac >> qexists `r` >> Cases_on `x`,
+    (* Tau *)
+    disj2_tac >> disj1_tac
+    >> qexists `λpath. f (NONE::path)`,
+    (* Vis *)
+    disj2_tac >> disj2_tac >> disj1_tac
+    >> qexistsl[`e`,`λa path. f (SOME (INL a)::path)`],
+    (* Br *)
+    disj2_tac >> disj2_tac >> disj2_tac
+    >> qexists `λb path. f (SOME (INR b)::path)`
+  ] >> rw[]
+  >> rpt (case_tac >> rw[])
+  >> rw[ctree_rep_ok_cons, ctree_rep_ok_def, path_ok_def]
+  >> irule path_not_ok_imp_silence >> rw[ctree_rep_ok_def, path_ok_def]
+QED
