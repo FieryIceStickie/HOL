@@ -330,14 +330,14 @@ Proof
 QED
 
 Theorem ctree_cases:
-  ∀v. 
-    (∃r  . v = Ret r  )
-  ∨ (∃u  . v = Tau u  )
-  ∨ (∃e g. v = Vis e g)
-  ∨ (∃k  . v = Br  k  )
+  ∀t. 
+    (∃r  . t = Ret r  )
+  ∨ (∃u  . t = Tau u  )
+  ∨ (∃e g. t = Vis e g)
+  ∨ (∃k  . t = Br  k  )
 Proof
   rw[All_def, GSYM ctree_rep_11]
-  >> `ctree_rep_ok $ ctree_rep v` by rw[ctree_rep_ok_ctree_rep]
+  >> `ctree_rep_ok $ ctree_rep t` by rw[ctree_rep_ok_ctree_rep]
   >> dxrule ctree_rep_cases >> rw[]
   >| [
     disj1_tac
@@ -350,3 +350,74 @@ Proof
     >> qexists `ctree_abs o k`
   ] >> metis_tac[ctree_rep_ok_All_rep, ctree_repabs, ctree_repabs_o]
 QED
+
+Definition ctree_CASE[nocompute]:
+  ctree_CASE (t: ('a,'b,'e,'r) ctree) ret tau vis br =
+    case ctree_rep t [] of
+    | Return r => ret r
+    | Silence  => tau   $     ctree_abs (λpath. ctree_rep t $ NONE::path        )
+    | Event e  => vis e $ λa. ctree_abs (λpath. ctree_rep t $ SOME (INL a)::path)
+    | Branch   => br    $ λb. ctree_abs (λpath. ctree_rep t $ SOME (INR b)::path)
+End
+
+Theorem ctree_CASE[compute, allow_rebind]:
+  ctree_CASE (Ret r)   ret tau vis br = ret r   ∧
+  ctree_CASE (Tau u)   ret tau vis br = tau u   ∧
+  ctree_CASE (Vis e g) ret tau vis br = vis e g ∧
+  ctree_CASE (Br  k)   ret tau vis br = br  k
+Proof
+  rw[ctree_CASE, All_def]
+  >> qmatch_goalsub_abbrev_tac `ctree_rep (ctree_abs v) []`
+  >> `ctree_rep (ctree_abs v) = v` suffices_by rw[Abbr`v`, All_rep_def, SF ETA_ss, ctree_absrep]
+  >> metis_tac[ctree_rep_ok_All_rep, ctree_repabs]
+QED
+
+Theorem ctree_CASE_eq:
+  v = ctree_CASE t ret tau vis br <=>
+      (∃r.   t = Ret r   ∧ ret r   = v)
+    ∨ (∃u.   t = Tau u   ∧ tau u   = v)
+    ∨ (∃e g. t = Vis e g ∧ vis e g = v)
+    ∨ (∃k.   t = Br  k   ∧ br  k   = v)
+Proof
+  qspec_then `t` strip_assume_tac ctree_cases
+  >> rw[ctree_CASE, ctree_11, ctree_distinct]
+  >> eq_tac >> rw[]
+QED
+
+Theorem itree_CASE_elim:
+  !f.
+  f(itree_CASE t ret tau vis) <=>
+    (?r. t = Ret r /\ f(ret r)) \/
+    (?u. t = Tau u /\ f(tau u)) \/
+    (?a g. t = Vis a g /\ f(vis a g))
+Proof
+  qspec_then ‘t’ strip_assume_tac itree_cases \\ rw []
+  \\ fs [itree_CASE,itree_11,itree_distinct]
+QED
+
+(* ctree unfold *)
+
+Datatype:
+  ctree_next = Ret' 'r
+             | Tau' 'seed
+             | Vis' 'e ('a -> 'seed)
+             | Br'  ('b -> 'seed)
+End
+
+Definition ctree_unfold_path_def:
+  (ctree_unfold_path f seed [] =
+     case f seed of
+     | Ret' r => Return r
+     | Tau' s => Silence
+     | Vis' e g => Event e) /\
+  (ctree_unfold_path f seed (NONE::rest) =
+     case f seed of
+     | Ret' r => Silence
+     | Tau' s => itree_unfold_path f s rest
+     | Vis' e g => Silence) /\
+  (ctree_unfold_path f seed (SOME n::rest) =
+     case f seed of
+     | Ret' r => Silence
+     | Tau' s => Silence
+     | Vis' e g => itree_unfold_path f (g n) rest)
+End
