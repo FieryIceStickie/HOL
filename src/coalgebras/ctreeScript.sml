@@ -30,6 +30,13 @@ End
 Type ctree_rep[local] = ``:('a + 'b) option list -> ('e,'r) ctree_el``;
 val f = ``(f: ('a,'b,'e,'r) ctree_rep)``
 
+Theorem path_el_cases[local]:
+  ∀n. (n = NONE) ∨ (∃a. n = SOME (INL a)) ∨ (∃b. n = SOME (INR b))
+Proof
+  Cases_on `n` >> rw[]
+  >> Cases_on `x` >> rw[]
+QED
+
 Definition path_ok_def:
   path_ok path ^f <=>
     ∀xs y ys. path = xs ++ y::ys ==>
@@ -232,22 +239,24 @@ QED
 Theorem ctree_rep_ok_All[local] = LIST_CONJ [ctree_rep_ok_Ret, ctree_rep_ok_Tau, ctree_rep_ok_Vis, ctree_rep_ok_Br];
 
 (* Helps metis_tac work *)
-Theorem ctree_rep_ok_All_rep[local]:
-    (∀r.   ctree_rep_ok $ Ret_rep r                )
-  ∧ (∀u.   ctree_rep_ok $ Tau_rep   (ctree_rep u)  )
-  ∧ (∀e g. ctree_rep_ok $ Vis_rep e (ctree_rep o g))
-  ∧ (∀k.   ctree_rep_ok $ Br_rep    (ctree_rep o k))
+Theorem ctree_All_repabs[local]:
+  (∀r.   ctree_rep $ ctree_abs (Ret_rep r                ) = Ret_rep r                ) ∧
+  (∀u.   ctree_rep $ ctree_abs (Tau_rep   (ctree_rep u)  ) = Tau_rep   (ctree_rep u)  ) ∧
+  (∀e g. ctree_rep $ ctree_abs (Vis_rep e (ctree_rep o g)) = Vis_rep e (ctree_rep o g)) ∧
+  (∀k.   ctree_rep $ ctree_abs (Br_rep    (ctree_rep o k)) = Br_rep    (ctree_rep o k))
 Proof
-  rw[ctree_rep_ok_All]
+  rw[] 
+  >> irule $ iffLR ctree_repabs
+  >> rw[ctree_rep_ok_All]
 QED
 
 (* Injectivity *)
 
 Theorem All_rep_11[local]:
-    (∀x y.     Ret_rep x   = Ret_rep y   <=> x = y)
-  ∧ (∀u v.     Tau_rep u   = Tau_rep v   <=> u = v)
-  ∧ (∀x y g k. Vis_rep x g = Vis_rep y k <=> x = y ∧ g = k)
-  ∧ (∀g k.     Br_rep  g   = Br_rep  k   <=> g = k)
+  (∀x y.     Ret_rep x   = Ret_rep y   <=> x = y) ∧
+  (∀u v.     Tau_rep u   = Tau_rep v   <=> u = v) ∧
+  (∀x y g k. Vis_rep x g = Vis_rep y k <=> x = y ∧ g = k) ∧
+  (∀g k.     Br_rep  g   = Br_rep  k   <=> g = k)
 Proof
   rw[All_rep_def, FUN_EQ_THM] >> eq_tac >> rw[]
   >| [
@@ -262,29 +271,28 @@ QED
 Theorem Ret_11:
   ∀x y. Ret x = Ret y <=> x = y
 Proof
-  metis_tac[Ret_def, ctree_rep_ok_All_rep, ctree_abs_11, ctree_rep_11, All_rep_11]
+  metis_tac[Ret_def, ctree_All_repabs, ctree_abs_11, ctree_rep_11, All_rep_11]
 QED
 
 Theorem Tau_11:
   ∀x y. Tau x = Tau y <=> x = y
 Proof
-  metis_tac[Tau_def, ctree_rep_ok_All_rep, ctree_abs_11, ctree_rep_11, All_rep_11]
+  metis_tac[Tau_def, ctree_All_repabs, ctree_abs_11, ctree_rep_11, All_rep_11]
 QED
 
 Theorem Vis_11:
   ∀x y g k. Vis x g = Vis y k <=> x = y ∧ g = k
 Proof
-  metis_tac[Vis_def, ctree_rep_ok_All_rep, ctree_abs_11, ctree_rep_o_11, All_rep_11]
+  metis_tac[Vis_def, ctree_All_repabs, ctree_abs_11, ctree_rep_o_11, All_rep_11]
 QED
 
 Theorem Br_11:
   ∀g k. Br g = Br k <=> g = k
 Proof
-  metis_tac[Br_def, ctree_rep_ok_All_rep, ctree_abs_11, ctree_rep_o_11, All_rep_11]
+  metis_tac[Br_def, ctree_All_repabs, ctree_abs_11, ctree_rep_o_11, All_rep_11]
 QED
 
 Theorem ctree_11 = LIST_CONJ [Ret_11, Tau_11, Vis_11, Br_11];
-
 
 (* Distinctness *)
 
@@ -304,12 +312,14 @@ QED
 Theorem ctree_distinct =
   ctree_distinct_lemma |> SIMP_RULE std_ss [ALL_DISTINCT, MEM, GSYM CONJ_ASSOC];
 
+(* Cases *)
+
 Theorem ctree_rep_cases[local]:
-  ctree_rep_ok f ==>
-      (∃r  . f = Ret_rep r                           )
-    ∨ (∃u  . f = Tau_rep u   ∧     ctree_rep_ok u    )
-    ∨ (∃e g. f = Vis_rep e g ∧ ∀a. ctree_rep_ok $ g a)
-    ∨ (∃k  . f = Br_rep  k   ∧ ∀b. ctree_rep_ok $ k b)
+  ∀f. ctree_rep_ok f ==>
+    (∃r  . f = Ret_rep r                           ) ∨
+    (∃u  . f = Tau_rep u   ∧     ctree_rep_ok u    ) ∨
+    (∃e g. f = Vis_rep e g ∧ ∀a. ctree_rep_ok $ g a) ∨
+    (∃k  . f = Br_rep  k   ∧ ∀b. ctree_rep_ok $ k b) 
 Proof
   rw[Once ctree_rep_ok_def, path_ok_def]
   >> Cases_on `f []`
@@ -330,13 +340,13 @@ Proof
 QED
 
 Theorem ctree_cases:
-  ∀t. 
-    (∃r  . t = Ret r  )
-  ∨ (∃u  . t = Tau u  )
-  ∨ (∃e g. t = Vis e g)
-  ∨ (∃k  . t = Br  k  )
+  ∀t.
+    (∃r  . t = Ret r  ) ∨
+    (∃u  . t = Tau u  ) ∨
+    (∃e g. t = Vis e g) ∨
+    (∃k  . t = Br  k  )
 Proof
-  rw[All_def, GSYM ctree_rep_11]
+  rw[All_def, GSYM ctree_rep_11, ctree_All_repabs]
   >> `ctree_rep_ok $ ctree_rep t` by rw[ctree_rep_ok_ctree_rep]
   >> dxrule ctree_rep_cases >> rw[]
   >| [
@@ -348,7 +358,7 @@ Proof
     >> qexistsl [`e`,`ctree_abs o g`],
     disj2_tac >> disj2_tac >> disj2_tac
     >> qexists `ctree_abs o k`
-  ] >> metis_tac[ctree_rep_ok_All_rep, ctree_repabs, ctree_repabs_o]
+  ] >> metis_tac[ctree_repabs, ctree_repabs_o]
 QED
 
 Definition ctree_CASE[nocompute]:
@@ -366,33 +376,31 @@ Theorem ctree_CASE[compute, allow_rebind]:
   ctree_CASE (Vis e g) ret tau vis br = vis e g ∧
   ctree_CASE (Br  k)   ret tau vis br = br  k
 Proof
-  rw[ctree_CASE, All_def]
-  >> qmatch_goalsub_abbrev_tac `ctree_rep (ctree_abs v) []`
-  >> `ctree_rep (ctree_abs v) = v` suffices_by rw[Abbr`v`, All_rep_def, SF ETA_ss, ctree_absrep]
-  >> metis_tac[ctree_rep_ok_All_rep, ctree_repabs]
+  rw[ctree_CASE, All_def, ctree_All_repabs]
+  >> rw[All_rep_def, SF ETA_ss, ctree_absrep]
 QED
 
 Theorem ctree_CASE_eq:
-  v = ctree_CASE t ret tau vis br <=>
-      (∃r.   t = Ret r   ∧ ret r   = v)
-    ∨ (∃u.   t = Tau u   ∧ tau u   = v)
-    ∨ (∃e g. t = Vis e g ∧ vis e g = v)
-    ∨ (∃k.   t = Br  k   ∧ br  k   = v)
+  ctree_CASE t ret tau vis br = v <=>
+    (∃r.   t = Ret r   ∧ ret r   = v) ∨
+    (∃u.   t = Tau u   ∧ tau u   = v) ∨
+    (∃e g. t = Vis e g ∧ vis e g = v) ∨
+    (∃k.   t = Br  k   ∧ br  k   = v)
 Proof
   qspec_then `t` strip_assume_tac ctree_cases
   >> rw[ctree_CASE, ctree_11, ctree_distinct]
-  >> eq_tac >> rw[]
 QED
 
-Theorem itree_CASE_elim:
-  !f.
-  f(itree_CASE t ret tau vis) <=>
-    (?r. t = Ret r /\ f(ret r)) \/
-    (?u. t = Tau u /\ f(tau u)) \/
-    (?a g. t = Vis a g /\ f(vis a g))
+Theorem ctree_CASE_elim:
+  ∀f.
+  f(ctree_CASE t ret tau vis br) <=>
+    (?r.   t = Ret r   ∧ f(ret r  )) ∨
+    (?u.   t = Tau u   ∧ f(tau u  )) ∨
+    (?e g. t = Vis e g ∧ f(vis e g)) ∨
+    (?k.   t = Br  k   ∧ f(br  k  ))
 Proof
-  qspec_then ‘t’ strip_assume_tac itree_cases \\ rw []
-  \\ fs [itree_CASE,itree_11,itree_distinct]
+  qspec_then `t` strip_assume_tac ctree_cases
+  >> rw[ctree_CASE, ctree_11, ctree_distinct]
 QED
 
 (* ctree unfold *)
@@ -407,17 +415,54 @@ End
 Definition ctree_unfold_path_def:
   (ctree_unfold_path f seed [] =
      case f seed of
-     | Ret' r => Return r
-     | Tau' s => Silence
-     | Vis' e g => Event e) /\
+     | Ret' r   => Return r
+     | Tau' u   => Silence
+     | Vis' e g => Event e
+     | Br'  k   => Branch) ∧
   (ctree_unfold_path f seed (NONE::rest) =
      case f seed of
-     | Ret' r => Silence
-     | Tau' s => itree_unfold_path f s rest
-     | Vis' e g => Silence) /\
-  (ctree_unfold_path f seed (SOME n::rest) =
+     | Tau' u => ctree_unfold_path f u rest
+     | _      => Silence) ∧
+  (ctree_unfold_path f seed (SOME (INL a)::rest) =
      case f seed of
-     | Ret' r => Silence
-     | Tau' s => Silence
-     | Vis' e g => itree_unfold_path f (g n) rest)
+     | Vis' e g => ctree_unfold_path f (g a) rest
+     | _        => Silence) ∧
+  (ctree_unfold_path f seed (SOME (INR b)::rest) =
+     case f seed of
+     | Br'  k   => ctree_unfold_path f (k b) rest
+     | _        => Silence)
 End
+
+Definition ctree_unfold:
+  ctree_unfold f seed = ctree_abs (ctree_unfold_path f seed)
+End
+
+Theorem ctree_unfold_path_repabs[local]:
+  ctree_rep (ctree_abs (ctree_unfold_path f s)) = ctree_unfold_path f s
+Proof
+  fs[GSYM ctree_repabs, ctree_rep_ok_def]
+  >> qid_spec_tac `s`
+  >> Induct_on `path` >- rw[path_ok_def]
+  >> Cases_on `h` using path_el_cases
+  >> rw[ctree_unfold_path_def]
+  >> case_tac
+  >> first_x_assum irule >> gvs[path_ok_def]
+  >> Cases_on `xs` >> gvs[ctree_unfold_path_def]
+  >> metis_tac[]
+QED
+
+Theorem ctree_unfold[allow_rebind]:
+  ctree_unfold f seed =
+    case f seed of
+    | Ret' r   => Ret r
+    | Tau' s   => Tau   (ctree_unfold f s)
+    | Vis' e g => Vis e (ctree_unfold f o g)
+    | Br'  k   => Br    (ctree_unfold f o k)
+Proof
+  Cases_on `f seed`
+  >> rw[ctree_unfold, All_def, GSYM ctree_rep_11]
+  >> rw[ctree_unfold_path_repabs, ctree_All_repabs, FUN_EQ_THM]
+  >> rename[`ctree_unfold_path f seed path`]
+  >> Cases_on `path` >> TRY $ Cases_on `h` using path_el_cases
+  >> rw[ctree_unfold_path_def, All_def, All_rep_def, ctree_unfold, ctree_unfold_path_repabs]
+QED
