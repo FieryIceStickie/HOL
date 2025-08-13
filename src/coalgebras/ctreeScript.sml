@@ -245,7 +245,7 @@ Theorem ctree_All_repabs[local]:
   (∀e g. ctree_rep $ ctree_abs (Vis_rep e (ctree_rep o g)) = Vis_rep e (ctree_rep o g)) ∧
   (∀k.   ctree_rep $ ctree_abs (Br_rep    (ctree_rep o k)) = Br_rep    (ctree_rep o k))
 Proof
-  rw[] 
+  rw[]
   >> irule $ iffLR ctree_repabs
   >> rw[ctree_rep_ok_All]
 QED
@@ -319,7 +319,7 @@ Theorem ctree_rep_cases[local]:
     (∃r  . f = Ret_rep r                           ) ∨
     (∃u  . f = Tau_rep u   ∧     ctree_rep_ok u    ) ∨
     (∃e g. f = Vis_rep e g ∧ ∀a. ctree_rep_ok $ g a) ∨
-    (∃k  . f = Br_rep  k   ∧ ∀b. ctree_rep_ok $ k b) 
+    (∃k  . f = Br_rep  k   ∧ ∀b. ctree_rep_ok $ k b)
 Proof
   rw[Once ctree_rep_ok_def, path_ok_def]
   >> Cases_on `f []`
@@ -465,4 +465,60 @@ Proof
   >> rename[`ctree_unfold_path f seed path`]
   >> Cases_on `path` >> TRY $ Cases_on `h` using path_el_cases
   >> rw[ctree_unfold_path_def, All_def, All_rep_def, ctree_unfold, ctree_unfold_path_repabs]
+QED
+
+(* Equivalences *)
+
+Theorem ctree_rep_simps[simp]:
+  ctree_rep (Ret r) [] = Return r ∧
+  ctree_rep (Ret r) (NONE::rest) = Silence ∧
+  ctree_rep (Ret r) (SOME (INL a)::rest) = Silence ∧
+  ctree_rep (Ret r) (SOME (INR b)::rest) = Silence ∧
+  ctree_rep (Tau u) [] = Silence ∧
+  ctree_rep (Tau u) (NONE::rest) = ctree_rep u rest ∧
+  ctree_rep (Tau u) (SOME (INL a)::rest) = Silence ∧
+  ctree_rep (Tau u) (SOME (INR b)::rest) = Silence ∧
+  ctree_rep (Vis e g) [] = Event e ∧
+  ctree_rep (Vis e g) (NONE::rest) = Silence ∧
+  ctree_rep (Vis e g) (SOME (INL a)::rest) = ctree_rep (g a) rest ∧
+  ctree_rep (Vis e g) (SOME (INR b)::rest) = Silence ∧
+  ctree_rep (Br k) [] = Branch ∧
+  ctree_rep (Br k) (NONE::rest) = Silence ∧
+  ctree_rep (Br k) (SOME (INL a)::rest) = Silence ∧
+  ctree_rep (Br k) (SOME (INR b)::rest) = ctree_rep (k b) rest
+Proof
+  rw[All_def, ctree_All_repabs] >> rw[All_rep_def]
+QED
+
+Theorem ctree_bisimulation:
+  ∀t1 t2.
+    t1 = t2 <=> ∃R. R t1 t2 ∧
+      (∀r t. R (Ret r) t ==> t = Ret r) ∧
+      (∀u t. R (Tau u) t ==> ∃v. t = Tau v ∧ R u v) ∧
+      (∀e g t. R (Vis e g) t ==> ∃h. t = Vis e h ∧ ∀a. R (g a) (h a)) ∧
+      (∀k t. R (Br k) t ==> ∃j. t = Br j ∧ ∀b. R (k b) (j b))
+Proof
+  rw[] >> eq_tac >> rw[]
+  >- (qexists `(=)` >> fs[ctree_11])
+  >> rw[GSYM ctree_rep_11, FUN_EQ_THM]
+  >> last_x_assum mp_tac >> qid_spec_tac `t2` >> qid_spec_tac `t1`
+  >> rename[`_ path = _ path`] >> Induct_on `path`
+  >> Cases_on `t1` using ctree_cases >> rw[]
+  >> last_x_assum $ dxrule_then strip_assume_tac >> rw[]
+  >> Cases_on `h` using path_el_cases >> rw[]
+QED
+
+Theorem ctree_strong_bisimulation:
+  ∀t1 t2.
+    t1 = t2 <=> ∃R. R t1 t2 ∧
+      (∀r t. R (Ret r) t ==> t = Ret r) ∧
+      (∀u t. R (Tau u) t ==> ∃v. t = Tau v ∧ (R u v ∨ u = v)) ∧
+      (∀e g t. R (Vis e g) t ==> ∃h. t = Vis e h ∧ ∀a. R (g a) (h a) ∨ g a = h a) ∧
+      (∀k t. R (Br k) t ==> ∃j. t = Br j ∧ ∀b. R (k b) (j b) ∨ k b = j b)
+Proof
+  rw[] >> eq_tac >> rw[]
+  >- (qexists `(=)` >> fs[ctree_11])
+  >> rw[Once ctree_bisimulation]
+  >> qexists `λp q. R p q ∨ p = q`
+  >> metis_tac[]
 QED
