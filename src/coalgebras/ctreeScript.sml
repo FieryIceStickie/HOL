@@ -522,3 +522,54 @@ Proof
   >> qexists `λp q. R p q ∨ p = q`
   >> metis_tac[]
 QED
+
+(* Register type *)
+
+Theorem ctree_CASE_cong:
+  ∀M M' ret tau vis br ret' tau' vis' br'.
+    (M = M') ∧
+    (∀r. M' = Ret r ==> ret r = ret' r) ∧
+    (∀u. M' = Tau u ==> tau u = tau' u) ∧
+    (∀e g. M' = Vis e g ==> vis e g = vis' e g) ∧
+    (∀k. M' = Br k ==> br k = br' k) ==>
+    ctree_CASE M' ret tau vis br = ctree_CASE M' ret' tau' vis' br'
+Proof
+  rw[] 
+  >> qspec_then `M` strip_assume_tac ctree_cases
+  >> rw[ctree_CASE]
+QED
+
+Theorem datatype_itree:
+  DATATYPE ((ctree
+    (Ret : 'r -> ('a, 'b, 'e, 'r) ctree)
+    (Tau : ('a, 'b, 'e, 'r) ctree -> ('a, 'b, 'e, 'r) ctree)
+    (Vis : 'e -> ('a -> ('a, 'b, 'e, 'r) ctree) -> ('a, 'b, 'e, 'r) ctree)
+    (Br  : ('b -> ('a, 'b, 'e, 'r) ctree) -> ('a, 'b, 'e, 'r) ctree)
+  ): bool)
+Proof
+  rw[boolTheory.DATATYPE_TAG_THM]
+QED
+
+val _ = TypeBase.export
+  [TypeBasePure.mk_datatype_info
+    { ax = TypeBasePure.ORIG TRUTH,
+      induction = TypeBasePure.ORIG ctree_bisimulation,
+      case_def = ctree_CASE,
+      case_cong = ctree_CASE_cong,
+      case_eq = ctree_CASE_eq,
+      case_elim = ctree_CASE_elim,
+      nchotomy = ctree_cases,
+      size = NONE,
+      encode = NONE,
+      lift = NONE,
+      one_one = SOME ctree_11,
+      distinct = SOME ctree_distinct,
+      fields = [],
+      accessors = [],
+      updates = [],
+      destructors = [],
+      recognizers = [] } ]
+
+Overload "case" = ``ctree_CASE``;
+
+
