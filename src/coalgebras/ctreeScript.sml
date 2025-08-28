@@ -539,7 +539,7 @@ Proof
   >> rw[ctree_CASE]
 QED
 
-Theorem datatype_itree:
+Theorem datatype_ctree:
   DATATYPE ((ctree
     (Ret : 'r -> ('a, 'b, 'e, 'r) ctree)
     (Tau : ('a, 'b, 'e, 'r) ctree -> ('a, 'b, 'e, 'r) ctree)
@@ -572,4 +572,139 @@ val _ = TypeBase.export
 
 Overload "case" = ``ctree_CASE``;
 
+(* --- Combinators --- *)
+Definition BrS_def:
+  BrS t = Br (Tau o t)
+End
+
+Definition Guard_def:
+  Guard t = Br (λ_. t)
+End
+
+Definition Guard'_def:
+  Guard' t = Br' (λ_. t)
+End
+
+(* Bind *)
+
+Definition ctree_push_inj_def:
+  ctree_push_inj inj t =
+    case t of
+    | Ret r   => Ret' r
+    | Tau u   => Tau'   (inj u)
+    | Vis e g => Vis' e (inj o g)
+    | Br  k   => Br'    (inj o k)
+End
+
+Definition ctree_bind_def:
+  ctree_bind t k = ctree_unfold (λn.
+    case n of
+    | INL (Ret r) => ctree_push_inj INR (k r)
+    | INL (Tau u) => Tau' (INL u)
+    | INL (Vis e g) => Vis' e (INL o g)
+    | INL (Br k) => Br' (INL o k)
+    | INR v => ctree_push_inj INR v
+  ) (INL t)
+End
+
+Theorem ctree_bind_INR_id[local]:
+  ctree_unfold (λn.
+    case n of
+    | INL (Ret r) => ctree_push_inj INR (k r)
+    | INL (Tau u) => Tau' (INL u)
+    | INL (Vis e g) => Vis' e (INL o g)
+    | INL (Br k) => Br' (INL o k)
+    | INR v => ctree_push_inj INR v
+  ) (INR t) = t
+Proof
+  rw[Once ctree_strong_bisimulation]
+  >> qexists `λp q. p = ctree_unfold (λn.
+    case n of
+    | INL (Ret r) => ctree_push_inj INR (k r)
+    | INL v => ctree_push_inj INL v
+    | INR v => ctree_push_inj INR v
+  ) (INR q)`
+  >> rw[] >> Cases_on `t`
+  >> gvs[Once ctree_unfold, ctree_push_inj_def]
+  >> fs[Once ctree_unfold]
+QED
+
+Theorem ctree_bind_thm[simp]:
+  ctree_bind (Ret r)   h = h r ∧
+  ctree_bind (Tau u)   h = Tau (ctree_bind u h) ∧
+  ctree_bind (Vis e g) h = Vis e (λa. ctree_bind (g a) h) ∧
+  ctree_bind (Br k)    h = Br (λb. ctree_bind (k b) h)
+Proof
+  rw[ctree_bind_def]
+  >- (
+    Cases_on `h r` 
+    >> rw[Once ctree_unfold, Once ctree_push_inj_def, FUN_EQ_THM, ctree_bind_INR_id]
+  )
+  >> rw[Once ctree_unfold, Once ctree_push_inj_def, FUN_EQ_THM]
+QED
+
+Theorem ctree_bind_right_identity[simp]:
+  ctree_bind t Ret = t
+Proof
+  rw[Once ctree_bisimulation]
+  >> qexists `λp q. p = ctree_bind q Ret` >> rw[]
+  >> Cases_on `t` >> gvs[]
+QED
+
+Theorem ctree_bind_assoc:
+  ctree_bind (ctree_bind t k) k'
+  = ctree_bind t (λx. ctree_bind (k x) k')
+Proof
+  rw[Once ctree_strong_bisimulation]
+  >> qexists `λp q. ∃v.
+    p = ctree_bind (ctree_bind v k) k' ∧
+    q = ctree_bind v (λx. ctree_bind (k x) k')
+  ` >> rw[]
+  >- metis_tac[]
+  >> Cases_on `v` >> gvs[]
+  >> metis_tac[]
+QED
+
+(* Iter *)
+
+Definition ctree_iter_def:
+  ctree_iter body seed = ctree_unfold (λn.
+    case n of
+    | Ret (INL i) => Guard' (body i)
+    | Ret (INR r) => Ret' r
+    | Tau u       => Tau' u
+    | Vis e g     => Vis' e g
+    | Br  k       => Br'  k
+  ) (body seed)
+End
+
+Theorem ctree_iter_thm:
+  ctree_iter body seed = ctree_bind (body seed) (λlr. 
+    case lr of
+    | INL i => Guard (ctree_iter body i)
+    | INR r => Ret r
+  )
+Proof
+  rw[ctree_iter_def]
+  >> qmatch_goalsub_abbrev_tac `ctree_unfold f _ = ctree_bind _ f'`
+  >> rw[Once ctree_strong_bisimulation]
+  >> qexists `λp q. ∃v. p = ctree_unfold f v ∧ q = ctree_bind v f'`
+  >> unabbrev_all_tac >> rw[]
+  >- metis_tac[]
+  >> first_x_assum $ strip_assume_tac o ONCE_REWRITE_RULE[ctree_unfold]
+  >> gvs[AllCaseEqs(), Guard_def, Guard'_def]
+  >> metis_tac[]
+QED
+
+(* Loop *)
+
+Definition ctree_loop_def:
+  ctree_loop body seed = ctree_iter (λa.
+    ctree_bind (body a) (λcb.
+      case cb of
+      | INL c => Ret (INL (INL c))
+      | INR b => Ret (INR b)
+    )
+  ) (INR seed)
+End
 
