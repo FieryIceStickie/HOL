@@ -16,8 +16,8 @@
 
 Theory ctree
 Ancestors
-  arithmetic list llist alist option pred_set relation pair
-  combin companion fixedPoint set_relation bisimulation
+  arithmetic list llist alist option relation pair
+  combin companion fixedPoint bisimulation
 Libs
   term_tactic mp_then BasicProvers dep_rewrite
 
@@ -645,6 +645,12 @@ Proof
   >> rw[Once ctree_unfold, FUN_EQ_THM]
 QED
 
+Theorem ctree_bind_guard[simp]:
+  ctree_bind (Guard t) h = Guard (ctree_bind t h)
+Proof
+  rw[Guard_def]
+QED
+
 Theorem ctree_bind_right_identity[simp]:
   ctree_bind t Ret = t
 Proof
@@ -728,6 +734,15 @@ Proof
   rw[ctree_stuck_def, Once ctree_unfold_guard]
 QED
 
+Theorem ctree_bind_stuck:
+  ctree_bind ctree_stuck k = ctree_stuck
+Proof
+  rw[Once ctree_strong_bisimulation]
+  >> qexists `λp q. p = ctree_bind ctree_stuck k ∧ q = ctree_stuck`
+  >> rw[]
+  >> rfs[Once ctree_stuck_thm, Guard_def]
+QED
+
 (* Bisimulations -- sbisim and wbisim *)
 
 (* strip_ch t t' means t' is one of the nodes "absorbed" by the branch node t
@@ -790,9 +805,29 @@ Inductive ctree_lts:
 [~br:] ctree_lts (k v) l t ==> ctree_lts (Br k) l t
 End
 
+(* For bind, note the different val r types *)
+Definition ctree_lts_same_def:
+  ctree_lts_same l l' <=> l = tau ∧ l' = tau ∨ ∃e a. l = obs e a ∧ l' = obs e a
+End
+
+Theorem ctree_lts_same_sym:
+  ctree_lts_same l l' ==> ctree_lts_same l' l
+Proof
+  rw[ctree_lts_same_def]
+QED
+
 Definition ctree_sbisim_def:
   ctree_sbisim = BISIM_REL ctree_lts
 End
+
+
+(* For when you need to expand sbisim but don't want to expand everything *)
+Theorem ctree_sbisim_lts:
+  ctree_sbisim p q ∧ ctree_lts p l p' ==> ∃q'. ctree_lts q l q' ∧ ctree_sbisim p' q'
+Proof
+  rw[ctree_sbisim_def, BISIM_REL_def, BISIM_def]
+  >> metis_tac[]
+QED
 
 Theorem not_ctree_lts_stuck:
   (∀l t'. ¬ctree_lts t l t') <=> t = ctree_stuck
@@ -812,12 +847,13 @@ Proof
   ]
 QED
 
+
 (*
 The following theorems refer to this setup
     ------l-------
    /              \
   p --> p' ---l--> p''
-  
+
   q --> q' ---l--> q''
    \              /
     ------l-------
@@ -852,30 +888,7 @@ Proof
   >> metis_tac[ch_l_iff_l]
 QED
 
-(* 
-If we have p' ~ q' we can push p' ---l--> p'' to q' ---l--> q'' such that p'' ~ q''
-This is just bisimulation, but useful to avoid rewriting via the huge definition whenever
-possible.
-*)
-Theorem push_l[local]:
-  ctree_lts p' l p'' ∧ ctree_sbisim p' q' ==> ∃q''. ctree_lts q' l q'' ∧ ctree_sbisim p'' q''
-Proof
-  rw[ctree_sbisim_def, BISIM_REL_def, BISIM_def]
-  >> metis_tac[]
-QED
-
 (* Equational theory *)
-
-Theorem BISIM_REL_strong:
-  ∀ts p0 q0. BISIM_REL ts p0 q0 = ∃R. R p0 q0 ∧ 
-    (∀p q. R p q ⇒
-      ∀l. (∀p'. ts p l p' ⇒ ∃q'. ts q l q' ∧ (R p' q' ∨ p' = q')) ∧
-           (∀q'. ts q l q' ⇒ ∃p'. ts p l p' ∧ (R p' q' ∨ p' = q')))
-Proof
-  rw[EQ_IMP_THM, BISIM_REL_def, BISIM_def]
-  >> qexists `λp q. R p q ∨ p = q`
-  >> metis_tac[]
-QED
 
 Theorem ctree_sbisim_refl:
   ctree_sbisim t t
@@ -899,6 +912,14 @@ Proof
   rw[ctree_sbisim_def, BISIM_REL_def]
   >> qexists `R' O R`
   >> metis_tac[BISIM_O, O_DEF]
+QED
+
+Theorem ctree_sbisim_stuck_uniq:
+  ctree_sbisim t ctree_stuck ==> t = ctree_stuck
+Proof
+  spose_not_then strip_assume_tac
+  >> gvs[GSYM not_ctree_lts_stuck, ctree_sbisim_def, BISIM_REL_def, BISIM_def]
+  >> metis_tac[not_ctree_lts_stuck]
 QED
 
 Theorem ctree_sbisim_ret:
@@ -983,10 +1004,10 @@ Proof
   >> qexists `λu v.
     (∀u'. strip_ch u u' ==> ∃v'. strip_ch v v' ∧ ctree_sbisim u' v') ∧
     (∀v'. strip_ch v v' ==> ∃u'. strip_ch u u' ∧ ctree_sbisim u' v') ∨ ctree_sbisim u v`
-  >> metis_tac[ch_l_iff_l, push_l, ctree_sbisim_sym]
+  >> metis_tac[ch_l_iff_l, ctree_sbisim_lts, ctree_sbisim_sym]
 QED
 
-Theorem ctree_sbisim_not_0:
+Theorem ctree_sbisim_not_0[local]:
   (¬ctree_sbisim (Ret r) (Tau u)) ∧
   (¬ctree_sbisim (Ret r) (Vis e g)) ∧
   (¬ctree_sbisim (Tau u) (Vis e g))
@@ -1012,6 +1033,110 @@ Theorem ctree_sbisim_not[simp]:
   (¬ctree_sbisim (Vis e g) (Tau u))
 Proof
   metis_tac[ctree_sbisim_not_0, ctree_sbisim_sym]
+QED
+
+Theorem ctree_sbisim_br_uniq_lts:
+  (ctree_sbisim (Br k) (Ret r) ∧ ctree_lts (Br k) l p' ==> l = val r ∧ p' = ctree_stuck) ∧
+  (ctree_sbisim (Br k) (Tau u) ∧ ctree_lts (Br k) l p' ==> l = tau ∧ ctree_sbisim p' u) ∧
+  (ctree_sbisim (Br k) (Vis e g) ∧ ctree_lts (Br k) l p' ==> ∃a. l = obs e a ∧ ctree_sbisim p' (g a))
+Proof
+  rw[] >> dxrule_all ctree_sbisim_lts
+  >> rfs[Once ctree_lts_cases]
+  >> metis_tac[ctree_sbisim_stuck_uniq]
+QED
+
+(* Common case *)
+Theorem ctree_sbisim_br_ret:
+  ctree_sbisim (Br k) (Ret r) ==> ctree_sbisim (k b) (Ret r) ∨ k b = ctree_stuck
+Proof
+  Cases_on `k b = ctree_stuck` >- rw[]
+  >> dxrule_at Concl $ iffLR not_ctree_lts_stuck >> rw[]
+  >> rename[`ctree_lts (k b) l t`]
+  >> disj1_tac
+  >> rw[] >> irule ctree_sbisim_match_ch >> rw[]
+  >- (
+    drule_then strip_assume_tac $ cj 4 strip_ch_rules
+    >> dxrule_then strip_assume_tac ch_imp_l
+    >> dxrule_all ctree_sbisim_lts >> rw[]
+    >> Cases_on `p'`
+    >> gvs[Once ctree_lts_cases]
+    >> rfs[Once ctree_lts_cases]
+    >> rw[ctree_sbisim_refl]
+  )
+  >> qexists `Ret r` >> rw[]
+  >> drule_then strip_assume_tac $ cj 4 ctree_lts_rules
+  >> dxrule_all ctree_sbisim_lts >> rw[]
+  >> `l = val r ∧ q' = ctree_stuck` by rfs[Once ctree_lts_cases]
+  >> `t = ctree_stuck` by metis_tac[ctree_sbisim_stuck_uniq]
+  >> gvs[ctree_sbisim_refl, ctree_lts_rules]
+  >> dxrule_then strip_assume_tac $ iffRL ch_l_iff_l
+  >> Cases_on `p'` >> gvs[Once ctree_lts_cases, not_strip_ch_br]
+QED
+
+Theorem ctree_lts_bind_cases:
+  ∀p. ctree_lts (ctree_bind p k) l p'' ==> ∃l'.
+    (∃p'. ctree_lts_same l l' ∧ ctree_lts p l' p' ∧ p'' = ctree_bind p' k) ∨
+    (∃r. ctree_lts p (val r) ctree_stuck ∧ ctree_lts (k r) l p'')
+Proof
+  Induct_on `ctree_lts` >> rw[]
+  >> Cases_on `p` >> gvs[]
+  >> metis_tac[ctree_bind_stuck, ctree_lts_rules, ctree_lts_same_def]
+QED
+
+Theorem ctree_lts_bind_ret[local]:
+  ctree_lts p (val r) ctree_stuck ∧ ctree_lts (k r) l p' ==> ctree_lts (ctree_bind p k) l p'
+Proof
+  Induct_on `ctree_lts` >> rw[]
+  >> first_x_assum $ dxrule_then strip_assume_tac
+  >> qmatch_goalsub_abbrev_tac `ctree_lts (Br c) l p'`
+  >> metis_tac[ctree_lts_rules]
+QED
+
+Theorem ctree_lts_bind_tau_vis[local]:
+  ctree_lts p l p' ∧ ctree_lts_same l l' ==> ctree_lts (ctree_bind p k) l' (ctree_bind p' k)
+Proof
+  Induct_on `ctree_lts` >> rw[ctree_lts_same_def, ctree_lts_rules]
+  >> qmatch_goalsub_abbrev_tac `ctree_lts (Br c) l q`
+  >> metis_tac[ctree_lts_rules]
+QED
+
+Theorem ctree_lts_bind_rules = LIST_CONJ [ctree_lts_bind_ret, ctree_lts_bind_tau_vis];
+
+Theorem ctree_sbisim_bind_t[local]:
+  ctree_sbisim t t' ==> ctree_sbisim (ctree_bind t k) (ctree_bind t' k)
+Proof
+  rw[] >> rw[ctree_sbisim_def, Once BISIM_REL_sym_strong_def]
+  >> qexists `λp q. ∃u v. p = ctree_bind u k ∧ q = ctree_bind v k ∧ ctree_sbisim u v`
+  >> rw[GSYM ctree_sbisim_def]
+  >- (gvs[symmetric_def] >> metis_tac[ctree_sbisim_sym])
+  >- metis_tac[]
+  >> dxrule_then strip_assume_tac ctree_lts_bind_cases
+  >> metis_tac[
+    ctree_sbisim_lts, ctree_lts_bind_rules,
+    ctree_lts_same_sym, ctree_sbisim_stuck_uniq,
+    ctree_sbisim_refl, ctree_sbisim_sym
+  ]
+QED
+
+Theorem ctree_sbisim_bind_k[local]:
+  (∀r. ctree_sbisim (k r) (k' r)) ==> ctree_sbisim (ctree_bind t k) (ctree_bind t k')
+Proof
+  rw[] >> rw[ctree_sbisim_def, Once BISIM_REL_strong_def]
+  >> qexists `λp q. ∃u. p = ctree_bind u k ∧ q = ctree_bind u k'`
+  >> rw[GSYM ctree_sbisim_def]
+  >- metis_tac[]
+  >> dxrule_then strip_assume_tac ctree_lts_bind_cases
+  >> metis_tac[
+    ctree_sbisim_lts, ctree_lts_bind_rules,
+    ctree_lts_same_sym, ctree_sbisim_refl, ctree_sbisim_sym
+  ]
+QED
+
+Theorem ctree_sbisim_bind:
+  ctree_sbisim t t' ∧ (∀r. ctree_sbisim (k r) (k' r))
+    ==> ctree_sbisim (ctree_bind t k) (ctree_bind t' k')
+Proof
+  metis_tac[ctree_sbisim_bind_t, ctree_sbisim_bind_k, ctree_sbisim_trans]
 QED
 
 
