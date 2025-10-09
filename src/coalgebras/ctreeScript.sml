@@ -1093,7 +1093,7 @@ Proof
 QED
 
 Theorem ctree_lts_bind_tau_vis[local]:
-  ctree_lts p l p' ∧ ctree_lts_same l l' ==> ctree_lts (ctree_bind p k) l' (ctree_bind p' k)
+  ctree_lts p l' p' ∧ ctree_lts_same l l' ==> ctree_lts (ctree_bind p k) l (ctree_bind p' k)
 Proof
   Induct_on `ctree_lts` >> rw[ctree_lts_same_def, ctree_lts_rules]
   >> qmatch_goalsub_abbrev_tac `ctree_lts (Br c) l q`
@@ -1113,7 +1113,7 @@ Proof
   >> dxrule_then strip_assume_tac ctree_lts_bind_cases
   >> metis_tac[
     ctree_sbisim_lts, ctree_lts_bind_rules,
-    ctree_lts_same_sym, ctree_sbisim_stuck_uniq,
+    ctree_sbisim_stuck_uniq,
     ctree_sbisim_refl, ctree_sbisim_sym
   ]
 QED
@@ -1128,7 +1128,7 @@ Proof
   >> dxrule_then strip_assume_tac ctree_lts_bind_cases
   >> metis_tac[
     ctree_sbisim_lts, ctree_lts_bind_rules,
-    ctree_lts_same_sym, ctree_sbisim_refl, ctree_sbisim_sym
+    ctree_sbisim_refl, ctree_sbisim_sym
   ]
 QED
 
