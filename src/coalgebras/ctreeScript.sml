@@ -1277,6 +1277,13 @@ Proof
   >> metis_tac[ctree_sbisim_iter_chain, ctree_sbisim_stuck_uniq, ctree_lts_iter_fn_rules]
 QED
 
+Theorem ctree_sbisim_loop:
+  (∀s. ctree_sbisim (k s) (k' s)) ==> ctree_sbisim (ctree_loop k s) (ctree_loop k' s)
+Proof
+  rw[ctree_loop_def] >> irule ctree_sbisim_iter
+  >> metis_tac[ctree_sbisim_bind, ctree_sbisim_refl]
+QED
+
 (* wbisim *)
 
 Definition ctree_wbisim_def:
