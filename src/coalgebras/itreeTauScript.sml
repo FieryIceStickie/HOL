@@ -24,7 +24,7 @@ Ancestors
   arithmetic list llist alist option pred_set relation pair
   combin itree companion fixedPoint set_relation
 Libs
-  term_tactic mp_then
+  term_tactic mp_then dep_rewrite
 
 (* make type definition *)
 
