@@ -735,7 +735,6 @@ Proof
 QED
 
 (* Loop *)
-
 Definition ctree_loop_def:
   ctree_loop body seed = ctree_iter (λa.
     ctree_bind (body a) (λcb.
@@ -747,7 +746,6 @@ Definition ctree_loop_def:
 End
 
 (* Stuck *)
-
 Definition ctree_stuck_def:
   ctree_stuck = ctree_unfold (λ_. Guard' ()) ()
 End
@@ -1284,42 +1282,102 @@ QED
 
 (* wbisim *)
 
+Theorem ETS_CASES[local]:
+  ETS ts tau p p' <=> p = p' ∨ ∃u. ts p tau u ∧ ETS ts tau u p'
+Proof
+  rw[ETS_def, Once RTC_CASES1]
+QED
+
+Theorem ETS_INDUCT[local, rule_induction]:
+  ∀ts tau P. (∀p. P p p) ∧ (
+    (∀p p' q. ts p tau p' ∧ P p' q ⇒ P p q) ∨
+    (∀p q' q. P p q' ∧ ts q' tau q ⇒ P p q)
+  ) ⇒ ∀p0 q0. ETS ts tau p0 q0 ⇒ P p0 q0
+Proof
+  rw[] >| [irule RTC_INDUCT, irule RTC_INDUCT_RIGHT1] >> rw[]
+  >> qexists `λx y. ts x tau' y`
+  >> metis_tac[ETS_def]
+QED
+
+Theorem WTS_INDUCT[local]:
+  ∀ts tau P.
+    (∀p l q. l ≠ tau ∧ ts p l q ⇒ P p l q) ∧
+    (∀p p' l q. ts p tau p' ∧ P p' l q ⇒ P p l q) ∧
+    (∀p l q' q. P p l q' ∧ ts q' tau q ⇒ P p l q)
+  ⇒ ∀p0 l0 q0. l0 ≠ tau ∧ WTS ts tau p0 l0 q0 ⇒ P p0 l0 q0
+Proof
+  rw[WTS_def]
+  >> qhdtm_x_assum `ETS` mp_tac
+  >> qpat_x_assum `ts _ _ _` mp_tac
+  >> Induct_on `ETS` >> reverse (rw[])
+  >- metis_tac[]
+  >> qhdtm_x_assum `ETS` mp_tac
+  >> qpat_x_assum `ts _ _ _` mp_tac
+  >> Induct_on `ETS` >> rw[]
+  >> metis_tac[]
+QED
+
+Inductive ctree_wlts:
+[~lts:] ctree_lts p l q ∧ l ≠ tau ==> ctree_wlts p l q
+[~tauL:] ctree_lts p tau p' ∧ ctree_wlts p' l q ==> ctree_wlts p l q
+[~tauR:] ctree_wlts p l q' ∧ ctree_lts q' tau q ==> ctree_wlts p l q
+End
+
+Theorem ctree_wlts_wts_equiv:
+  ctree_wlts p l q <=> l ≠ tau ∧ WTS ctree_lts tau p l q
+Proof
+  eq_tac >- (
+    Induct_on `ctree_wlts` >> rw[]
+    >> metis_tac[TS_IMP_WTS, TS_IMP_ETS, ETS_REFL, ETS_WTS_ETS]
+  )
+  >> match_mp_tac WTS_INDUCT
+  >> metis_tac[ctree_wlts_rules]
+QED
+
+Inductive ctree_elts:
+[~refl:] ctree_elts p p
+[~tauL:] ctree_lts p tau p' ∧ ctree_elts p' q ==> ctree_elts p q
+[~tauR:] ctree_elts p q' ∧ ctree_lts q' tau q ==> ctree_elts p q
+End
+
+Theorem ctree_elts_ets_equiv:
+  ctree_elts p q <=> ETS ctree_lts tau p q
+Proof
+  eq_tac
+  >- (Induct_on `ctree_elts` >> metis_tac[ETS_REFL, TS_IMP_ETS, ETS_TRANS])
+  >> Induct_on `ETS`
+  >> metis_tac[ctree_elts_rules]
+QED
+
+Theorem ctree_wlts_thm:
+  ctree_wlts p l q <=> l ≠ tau ∧ ∃p' q'. ctree_elts p p' ∧ ctree_lts p' l q' ∧ ctree_elts q' q
+Proof
+  eq_tac
+  >- (Induct_on `ctree_wlts` >> metis_tac[ctree_elts_rules])
+  >> rw[ctree_wlts_wts_equiv, ctree_elts_ets_equiv]
+  >> metis_tac[TS_IMP_WTS, ETS_WTS_ETS]
+QED
+
 Definition ctree_wbisim_def:
   ctree_wbisim = WBISIM_REL ctree_lts tau
 End
 
-Inductive ctree_wlts:
-[~ret:] ctree_wlts (Ret r) (val r) ctree_stuck
-[~tauL:] ctree_wlts u l t ==> ctree_wlts (Tau u) l t
-[~tauR:] ctree_wlts u l t ==> ctree_wlts u l (Tau t)
-[~vis:] ctree_wlts (Vis e g) (obs e a) (g a)
-[~br:] ctree_wlts (k v) l t ==> ctree_wlts (Br k) l t
-End
-
-Theorem ctree_wlts_not_tau[simp]:
-  ¬ctree_wlts p tau p'
-Proof
-  Induct_on `ctree_wlts` >> rw[]
-QED
-
 Theorem ctree_wbisim_wlts:
-  ctree_wbisim p q ∧ ctree_wlts p l p' ==> ∃q'. ctree_wlts q l q' ∧ ctree_wbisim p q'
+  ctree_wbisim p q ∧ ctree_wlts p l p' ==> ∃q'. ctree_wlts q l q' ∧ ctree_wbisim p' q'
 Proof
-  rw[ctree_wbisim_def_rel, WBISIM_REL_def, WBISIM_def]
-  >> Cases_on `l = tau` >- metis_tac[ctree_wlts_not_tau]
-  >> rpt (first_x_assum $ dxrule_then strip_assume_tac)
-  >> first_x_assum $ dxrule_then strip_assume_tac
+  Induct_on `ctree_wlts`
+  >> rw[ctree_wbisim_def, WBISIM_REL_def]
+  >- metis_tac[WBISIM_def, ctree_wlts_wts_equiv]
+  >- (
+    rw[WBISIM_def]
+  )
+  >-
 QED
 
 Theorem ctree_wbisim_thm:
-  ctree_wbisim = BISIM_REL ctree_wlts
+
 Proof
-  rw[FUN_EQ_THM, EQ_IMP_THM] >> rename[`ctree_wbisim p q`]
-  >- (
-    rw[BISIM_REL_def, BISIM_def]
-    >> qexists `ctree_wbisim`
-    >> rw[]
-  )
+
 QED
 
 (* Examples *)
@@ -1329,7 +1387,7 @@ Theorem ctree_iter_stuck[local]:
   ctree_iter (λx. Ret $ INL (x+1)) 0 = ctree_stuck
 Proof
   rw[Once ctree_strong_bisimulation]
-  >> qexists `λp q. ∃n. p = ctree_iter(λx. Ret $ INL (x+1)) n ∧ q = ctree_stuck`
+  >> qexists `λp q. ∃n. p = ctree_iter (λx. Ret $ INL (x+1)) n ∧ q = ctree_stuck`
   >> rw[]
   >- metis_tac[]
   >> gvs[Once ctree_iter_thm, Guard_def]
@@ -1337,7 +1395,27 @@ Proof
   >> metis_tac[]
 QED
 
-(* Counterexample to converse of ctree_sbisim_match_ch *)
+(* Example of ctree_iter *)
+Definition ctree_collatz_tree[local]:
+  collatz_tree = Br (λb.
+    ctree_iter (λn.
+      ctree_bind (Ret (if EVEN n then n DIV 2 else 3 * n + 1)) (λm.
+        if m = b then Ret (INR b) else Ret (INL m)
+  )) b)
+End
+
+Theorem collatz_124[local]:
+  ctree_lts collatz_tree (val 1) ctree_stuck ∧
+  ctree_lts collatz_tree (val 2) ctree_stuck ∧
+  ctree_lts collatz_tree (val 4) ctree_stuck
+Proof
+  rw[] >> qmatch_goalsub_abbrev_tac `val n`
+  >> rw[ctree_collatz_tree] >> irule ctree_lts_br
+  >> qexists `n` >> rw[Abbr `n`]
+  >> rw[ctree_iter_fn_thm, ctree_iter_fn_def, ctree_lts_guard, ctree_lts_rules]
+QED
+
+(* Counterexample to converse of ctree_sbisim_strip_ch *)
 Definition BrVis1[local]:
   brvis1 = Br (λb. Vis 7 (λa. Ret (if b then a else ¬a)))
 End
