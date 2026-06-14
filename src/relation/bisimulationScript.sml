@@ -82,11 +82,33 @@ Proof
       PROVE_TAC [BISIM_def] ]
 QED
 
-Theorem BISIM_REL_sym:
-  symmetric (BISIM_REL ts)
+Theorem BISIM_REL_IS_EQUIV_REL :
+    !ts. equivalence (BISIM_REL ts)
 Proof
-  SRW_TAC[][symmetric_def, BISIM_REL_def]
-  >> METIS_TAC[BISIM_INV, inv_DEF]
+    SRW_TAC[][equivalence_def]
+ >- (SRW_TAC[][reflexive_def, BISIM_REL_def] \\
+     Q.EXISTS_TAC `Id` \\
+     REWRITE_TAC [BISIM_ID])
+ >- (SRW_TAC[][symmetric_def, BISIM_REL_def] \\
+     SRW_TAC[][EQ_IMP_THM] \\
+     Q.EXISTS_TAC `SC R` \\
+     FULL_SIMP_TAC (srw_ss ()) [BISIM_def, SC_DEF] \\
+     METIS_TAC[])
+ >- (SRW_TAC[][transitive_def, BISIM_REL_def] \\
+     Q.EXISTS_TAC `R' O R` \\
+     METIS_TAC [O_DEF, BISIM_O])
+QED
+
+Theorem BISIM_REL_EQUIV_rules =
+  BISIM_REL_IS_EQUIV_REL
+  |> SIMP_RULE bool_ss [equivalence_def, reflexive_def, symmetric_def, transitive_def];
+
+Theorem BISIM_REL_ts:
+  (BISIM_REL ts p q ∧ ts p l p' ==> ∃q'. ts q l q' ∧ BISIM_REL ts p' q') ∧
+  (BISIM_REL ts p q ∧ ts q l q' ==> ∃p'. ts p l p' ∧ BISIM_REL ts p' q')
+Proof
+  SRW_TAC[][BISIM_REL_def]
+  >> METIS_TAC[BISIM_def]
 QED
 
 Theorem BISIM_REL_strong_thm:
@@ -121,26 +143,8 @@ Proof
   >- METIS_TAC[BISIM_REL_sym_thm]
   >> PURE_ONCE_REWRITE_TAC[BISIM_REL_strong_thm]
   >> Q.EXISTS_TAC `λp q. R p q ∨ R q p`
-  >> METIS_TAC[symmetric_def, BISIM_REL_sym]
+  >> METIS_TAC[symmetric_def, BISIM_REL_EQUIV_rules]
 QED
-
-Theorem BISIM_REL_IS_EQUIV_REL :
-    !ts. equivalence (BISIM_REL ts)
-Proof
-    SRW_TAC[][equivalence_def]
- >- (SRW_TAC[][reflexive_def, BISIM_REL_def] \\
-     Q.EXISTS_TAC `Id` \\
-     REWRITE_TAC [BISIM_ID])
- >- (SRW_TAC[][symmetric_def, BISIM_REL_def] \\
-     SRW_TAC[][EQ_IMP_THM] \\
-     Q.EXISTS_TAC `SC R` \\
-     FULL_SIMP_TAC (srw_ss ()) [BISIM_def, SC_DEF] \\
-     METIS_TAC[])
- >- (SRW_TAC[][transitive_def, BISIM_REL_def] \\
-     Q.EXISTS_TAC `R' O R` \\
-     METIS_TAC [O_DEF, BISIM_O])
-QED
-
 
 (*---------------------------------------------------------------------------*)
 (*  Weak bisimulation                                                        *)
@@ -209,6 +213,25 @@ Proof
  >> Q.EXISTS_TAC `y`
  >> ASM_REWRITE_TAC []
 QED
+
+Theorem ETS_CASES:
+  ETS ts tau p p' <=> p = p' ∨ ∃u. ts p tau u ∧ ETS ts tau u p'
+Proof
+  SRW_TAC[][ETS_def, Once RTC_CASES1]
+QED
+
+Theorem ETS_INDUCT[rule_induction]:
+  ∀P. (∀p. P p p) ∧ (
+    (∀p p' q. ts p tau p' ∧ P p' q ⇒ P p q) ∨
+    (∀p q' q. P p q' ∧ ts q' tau q ⇒ P p q)
+  ) ⇒ ∀p0 q0. ETS ts tau p0 q0 ⇒ P p0 q0
+Proof
+    GEN_TAC >> STRIP_TAC
+ >> REWRITE_TAC [ETS_def]
+ >| [HO_MATCH_MP_TAC RTC_INDUCT, HO_MATCH_MP_TAC RTC_INDUCT_RIGHT1]
+ >> METIS_TAC []
+QED
+
 
 Theorem lemma1[local]:
     !R. (!p q.   ts p tau q ==> R p q) /\
@@ -387,6 +410,19 @@ Proof
       METIS_TAC [WBISIM_O, O_DEF])
 QED
 
+Theorem WBISIM_REL_EQUIV_rules = 
+  WBISIM_REL_IS_EQUIV_REL
+  |> SIMP_RULE bool_ss [equivalence_def, reflexive_def, symmetric_def, transitive_def];
+
+Theorem WBISIM_REL_ts:
+  (WBISIM_REL ts tau p q ∧ ts p l p' ∧ l ≠ tau ==> ∃q'. WTS ts tau q l q' ∧ WBISIM_REL ts tau p' q') ∧
+  (WBISIM_REL ts tau p q ∧ ts q l q' ∧ l ≠ tau ==> ∃p'. WTS ts tau p l p' ∧ WBISIM_REL ts tau p' q') ∧
+  (WBISIM_REL ts tau p q ∧ ts p tau p' ==> ∃q'. ETS ts tau q q' ∧ WBISIM_REL ts tau p' q') ∧
+  (WBISIM_REL ts tau p q ∧ ts q tau q' ==> ∃p'. ETS ts tau p p' ∧ WBISIM_REL ts tau p' q')
+Proof
+  SRW_TAC[][WBISIM_REL_def]
+  >> METIS_TAC[WBISIM_def]
+QED
 
 (*---------------------------------------------------------------------------*)
 (*  Relations between strong and weak bisimulations                          *)
