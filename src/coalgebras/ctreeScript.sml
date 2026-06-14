@@ -2518,6 +2518,49 @@ Proof
   >> metis_tac[]
 QED
 
+(* iter is a generalization of unfold *)
+Definition ctree_unfold_iter_def:
+  ctree_unfold_iter f s =
+    case f s of
+    | Ret' r   => RRet r
+    | Tau' u   => Tau (LRet u)
+    | Vis' e g => Vis e (LRet o g)
+    | Br'  k   => Br (LRet o k)
+End
+
+Theorem ctree_sbisim_unfold_iter_lemma[local]:
+  ctree_sbisim (ctree_unfold f seed) (Guard (ctree_iter (ctree_unfold_iter f) seed))
+Proof
+  irule $ iffRL ctree_sbisim_strong_thm
+  >> qexists `λu v. ∃s.
+    u = ctree_unfold f s ∧
+    v = Guard (ctree_iter (ctree_unfold_iter f) s)`
+  >> rw[] >- metis_tac[ctree_sbisim_refl]
+  >> gvs[] >- (
+    first_x_assum mp_tac >> qid_spec_tac `s`
+    >> Induct_on `ctree_lts` >> rw[]
+    >> rw[Once ctree_iter_fn_thm, ctree_unfold_iter_def]
+    >> metis_tac[]
+  )
+  >> gvs[Once ctree_iter_fn_thm, ctree_lts_iter_fn_cases]
+  >> rpt (first_x_assum mp_tac) >> qid_spec_tac `s` >> (
+    Induct_on `seeds` >> rw[] >- (
+      Cases_on `f s`
+      >> gvs[ctree_unfold_iter_def, Once ctree_unfold_thm]
+      >> metis_tac[]
+    )
+    >> first_x_assum $ dxrule_then strip_assume_tac
+    >> Cases_on `f s`
+    >> gvs[ctree_unfold_iter_def] >> rw[Once ctree_unfold_thm]
+    >> metis_tac[]
+  )
+QED
+
+Theorem ctree_sbisim_unfold_iter =
+  ctree_sbisim_unfold_iter_lemma
+  |> SIMP_RULE std_ss [ctree_sbisim_sym_eqs];
+
+
 Datatype:
   ACtree = ARet 'r | ATau 'u | AVis 'e 'g
 End
