@@ -21,6 +21,73 @@ Ancestors
 Libs
   pred_setLib term_tactic mp_then BasicProvers dep_rewrite quotientLib
 
+Theorem MAX_SUC:
+  MAX (SUC n) (SUC m) = SUC (MAX n m)
+Proof
+  rw[MAX_DEF]
+QED
+
+Theorem MAX_SET_IMAGE_SUC:
+  FINITE P ∧ P ≠ ∅ ==> MAX_SET (IMAGE SUC P) = SUC (MAX_SET P)
+Proof
+  Induct_on `FINITE` >> rw[MAX_SET_THM]
+  >> Cases_on `P = ∅` >> gvs[MAX_SUC]
+QED
+
+Theorem FINITE_UPPER_BOUNDED:
+  FINITE P <=> ∃m. ∀n. n ∈ P ==> n ≤ m
+Proof
+  rw[EQ_IMP_THM]
+  >- metis_tac[X_LE_MAX_SET]
+  >> first_x_assum mp_tac >> qid_spec_tac `P`
+  >> Induct_on `m` >> rw[]
+  >> irule SUBSET_FINITE_I
+  >- (qexists `{0}` >> rw[SUBSET_DEF])
+  >> qexists `(P DIFF {SUC m}) ∪ {SUC m}` >> rw[SUBSET_DEF]
+  >> first_x_assum irule >> rw[]
+  >> first_x_assum drule >> rw[]
+QED
+
+Theorem DIFF_EMPTY_IMP_EQ:
+  s DIFF t = ∅ ∧ t DIFF s = ∅ <=> s = t
+Proof
+  rw[EXTENSION] >> metis_tac[]
+QED
+
+Theorem MAX_SET_BIGUNION:
+  FINITE Ps ∧ (∀P. P ∈ Ps ==> FINITE P) ∧ (∃P. P ∈ Ps ∧ P ≠ ∅)
+    ==> ∃P. P ∈ Ps ∧ MAX_SET P = MAX_SET (BIGUNION Ps) ∧
+        ∀P'. P' ∈ Ps ==> MAX_SET P' ≤ MAX_SET P
+Proof
+  rw[] >> `MAX_SET (BIGUNION Ps) ∈ BIGUNION Ps` by (
+    irule MAX_SET_IN_SET
+    >> rw[FINITE_BIGUNION, EXTENSION]
+    >- metis_tac[]
+    >> qexists `P` >> rw[]
+    >> gvs[EXTENSION] >> metis_tac[]
+  )
+  >> gvs[BIGUNION] >> gvs[GSYM BIGUNION]
+  >> qexists `s` >> simp[] >> conj_asm1_tac
+  >> DEP_REWRITE_TAC[MAX_SET_TEST_IFF] >> rw[]
+  >- (rw[EXTENSION] >> metis_tac[]) 
+  >- (irule X_LE_MAX_SET >> rw[FINITE_BIGUNION] >> rpt (goal_assum $ dxrule_at Any))
+  >> Cases_on `P' = ∅` >> rw[]
+  >> irule X_LE_MAX_SET >> rw[FINITE_BIGUNION]
+  >> irule_at (Pos hd) MAX_SET_IN_SET >> rw[]
+QED
+
+Theorem FINITE_SET_OF_SETS_UPPER_BOUNDED:
+  (∀P. P ∈ Ps ==> FINITE P ∧ MAX_SET P ≤ n) ==> FINITE Ps
+Proof
+  rw[] >> irule SUBSET_FINITE_I
+  >> qexists `POW {k | k ≤ n}`
+  >> rw[FINITE_UPPER_BOUNDED]
+  >- metis_tac[]
+  >> rw[SUBSET_DEF, IN_POW]
+  >> first_x_assum dxrule >> rw[]
+  >> metis_tac[X_LE_MAX_SET, LE_TRANS]
+QED
+
 (* Used with irule_at for bisimulation *)
 Theorem rel_exact_lemma[local]:
   (λp q. p = u ∧ q = v) u v
@@ -873,16 +940,6 @@ Proof
   eq_tac >> Cases_on `t` >> rw[]
 QED
 
-Theorem not_ret_imp_ctree_bind_not_ret:
-  (∀r. t ≠ Ret r) ==> ∃(t': ('a, 'b, 'c, 'a + 'b) ctree) k.
-    (∀r. t' ≠ Ret r) ∧ t = ctree_bind t' k
-Proof
-  Cases_on `t` >> rw[]
-  >- (qexistsl [`Tau (Ret ARB)`, `λv. u`] >> rw[])
-  >- (qexistsl [`Vis e LRet`, `sum_case g (λv. ARB)`] >> rw[FUN_EQ_THM])
-  >> qexistsl [`Br RRet`, `sum_case (λv. ARB) k`] >> rw[FUN_EQ_THM]
-QED
-
 Theorem ctree_compose_ret_inv:
   f >>> g = Ret <=> ∃f' g'.
     f = Ret o f' ∧
@@ -1488,6 +1545,203 @@ Definition ctree_loop_def:
   ctree_loop body seed = ctree_iter (body >>> Ret o SUM_MAP INL I) (INR seed)
 End
 
+(* --- 1.5 - Height --- *)
+
+Definition ctree_heights_def:
+  ctree_heights t = {LENGTH path | IS_SOME (ctree_index path t)}
+End
+
+Theorem ctree_heights_zero[simp]:
+  0 ∈ ctree_heights t
+Proof
+  rw[ctree_heights_def]
+QED
+
+Theorem ctree_heights_nonempty[simp]:
+  ctree_heights t ≠ ∅
+Proof
+  rw[EXTENSION] >> irule_at Any ctree_heights_zero
+QED
+
+Theorem ctree_heights_closed_below[local]:
+  n ≤ m ∧ m ∈ ctree_heights t ==> n ∈ ctree_heights t
+Proof
+  rw[ctree_heights_def, IS_SOME_EXISTS]
+  >> qexists `TAKE n path` >> rw[]
+  >> metis_tac[TAKE_DROP, ctree_index_append_eq]
+QED
+
+Theorem ctree_heights_cases:
+  ∀t.
+    (FINITE (ctree_heights t) ∧ ∃n. ctree_heights t = {k | k ≤ n}) ∨
+    (INFINITE (ctree_heights t) ∧ ctree_heights t = UNIV)
+Proof
+  rw[] >> Cases_on `FINITE (ctree_heights t)` >> rw[] >- (
+    qexists `MAX_SET (ctree_heights t)`
+    >> rw[EXTENSION, EQ_IMP_THM, X_LE_MAX_SET]
+    >> irule ctree_heights_closed_below
+    >> goal_assum $ dxrule_at (Pos hd)
+    >> rw[MAX_SET_IN_SET]
+  )
+  >> rw[EXTENSION]
+  >> dxrule_at Concl $ iffRL FINITE_UPPER_BOUNDED >> rw[NOT_LE]
+  >> metis_tac[ctree_heights_closed_below, LT_IMP_LE]
+QED
+
+Theorem ctree_heights_ret[local]:
+  ctree_heights (Ret r) = {0}
+Proof
+  rw[ctree_heights_def, EXTENSION, IS_SOME_EXISTS]
+QED
+
+Theorem ctree_heights_simps[simp]:
+  ctree_heights (Ret r) = {0} ∧
+  ctree_heights (Tau u) = {0} ∪ IMAGE SUC (ctree_heights u) ∧
+  ctree_heights (Vis e g) = {0} ∪ IMAGE SUC (BIGUNION {ctree_heights (g a) | a | T}) ∧
+  ctree_heights (Br k) = {0} ∪ IMAGE SUC (BIGUNION {ctree_heights (k v) | v | T})
+Proof
+  rw[ctree_heights_ret] >> (
+    irule SUBSET_ANTISYM >> rw[SUBSET_DEF, ctree_heights_def, IS_SOME_EXISTS]
+    >- (Cases_on `path` >> gvs[SF DNF_ss] >> metis_tac[])
+    >> gvs[SPECIFICATION]
+  )
+  >> qrefine `h::p` >> rw[] >> metis_tac[]
+QED
+
+Theorem ctree_heights_combs_simps[simp]:
+  ctree_heights (Guard t) = {0} ∪ IMAGE SUC (ctree_heights t) ∧
+  ctree_heights (BrS k) = {0; 1} ∪ IMAGE (SUC o SUC) (BIGUNION {ctree_heights (k v) | v | T}) ∧
+  ctree_heights (Step t) = {0; 1} ∪ IMAGE (SUC o SUC) (ctree_heights t) ∧
+  ctree_heights (LRet s) = {0} ∧
+  ctree_heights (RRet r') = {0}
+Proof
+  rw[Guard_def, BrS_def, Step_def, LRet_def, RRet_def]
+  >> `{0; 1} = {0} ∪ {1}` by rw[EXTENSION]
+  >> rw[GSYM UNION_ASSOC] >> cong_tac (SOME 1)
+  >- (cong_tac (SOME 1) >> rw[EXTENSION] >> metis_tac[])
+  >> rw[IMAGE_o]
+  >> irule SUBSET_ANTISYM >> rw[SUBSET_DEF]
+  >> gvs[SF DNF_ss]
+  >> goal_assum $ dxrule_at Any
+QED
+
+Theorem ctree_heights_stuck_spin_simps[simp]:
+  ctree_heights ctree_stuck = UNIV ∧
+  ctree_heights ctree_spin = UNIV
+Proof
+  rw[ctree_heights_def, EXTENSION, IS_SOME_EXISTS]
+  >> Induct_on `x` >> rw[]
+  >| map qexists [`brE v::path`, `tauE::path`] >> rw[]
+QED
+
+Definition ctree_height_def:
+  ctree_height t =
+    if FINITE (ctree_heights t)
+    then SOME (MAX_SET (ctree_heights t))
+    else NONE
+End
+
+Theorem ctree_heights_nonempty_lemma:
+  {ctree_heights (f x) | x | T} ≠ ∅ ∧
+  {ctree_heights (f x) | x | T} ≠ {∅}
+Proof
+  rw[] >> irule $ CONTRAPOS (iffRL DIFF_EMPTY_IMP_EQ) >> rw[]
+  >> rw[FUN_EQ_THM] >> metis_tac[]
+QED
+
+Theorem ctree_height_zero[simp]:
+  ctree_height t = SOME 0 <=> ∃r. t = Ret r
+Proof
+  Cases_on `t` >> rw[ctree_height_def, MAX_SET_UNION]
+  >> spose_not_then strip_assume_tac
+  >> last_x_assum mp_tac
+  >> DEP_REWRITE_TAC[MAX_SET_IMAGE_SUC] >> rw[]
+  >> rw[ctree_heights_nonempty_lemma]
+QED
+
+Theorem ctree_height_ret_tau[simp]:
+  ctree_height (Ret r) = SOME 0 ∧
+  ctree_height (Tau u) = OPTION_MAP SUC (ctree_height u)
+Proof
+  rw[ctree_height_def]
+  >> DEP_REWRITE_TAC[MAX_SET_UNION, MAX_SET_IMAGE_SUC]
+  >> rw[]
+QED
+
+Theorem ctree_height_LRRet[simp]:
+  ctree_height (LRet s) = SOME 0 ∧ ctree_height (RRet r) = SOME 0
+Proof
+  rw[LRet_def, RRet_def]
+QED
+
+Theorem ctree_height_eq_some[simp]:
+  (ctree_height (Tau u) = SOME n <=> ∃m. n = SUC m ∧ ctree_height u = SOME m) ∧
+  (ctree_height (Vis e g) = SOME n <=> ∃m. n = SUC m ∧
+    (∃a. ctree_height (g a) = SOME m) ∧
+    ∀a. ∃j. ctree_height (g a) = SOME j ∧ j ≤ m) ∧
+  (ctree_height (Br k) = SOME n <=> ∃m. n = SUC m ∧
+    (∃v. ctree_height (k v) = SOME m) ∧
+    ∀v. ∃j. ctree_height (k v) = SOME j ∧ j ≤ m)
+Proof
+  rw[] >- metis_tac[] >> (
+    Cases_on `n` >- rw[] >> gvs[SF DNF_ss]
+    >> rename[`SOME (SUC n)`] >> eq_tac >- (
+      rw[ctree_height_def, SF DNF_ss, MAX_SET_UNION]
+      >> first_x_assum mp_tac
+      >> DEP_REWRITE_TAC[MAX_SET_IMAGE_SUC] >> rw[ctree_heights_nonempty_lemma]
+      >> dxrule MAX_SET_BIGUNION >> rw[SF DNF_ss]
+      >> metis_tac[]
+    )
+    >> strip_tac >> gvs[ctree_height_def]
+    >> conj_asm1_tac >> rw[]
+    >- (irule FINITE_SET_OF_SETS_UPPER_BOUNDED >> rw[SF DNF_ss] >> metis_tac[])
+    >- metis_tac[]
+    >> rw[MAX_SET_UNION, MAX_SET_IMAGE_SUC, ctree_heights_nonempty_lemma]
+    >> gvs[SF DNF_ss]
+    >> DEP_REWRITE_TAC[MAX_SET_TEST_IFF] >> rw[]
+    >> rw[ctree_heights_nonempty_lemma, SF DNF_ss]
+    >- (irule_at Any MAX_SET_IN_SET >> rw[])
+    >> metis_tac[X_LE_MAX_SET, LE_TRANS]
+  )
+QED
+
+Theorem ctree_height_eq_some_comb[simp]:
+  (ctree_height (Guard t) = SOME n <=> ∃m. n = SUC m ∧ ctree_height t = SOME m) ∧
+  (ctree_height (BrS k) = SOME n <=> ∃m. n = SUC (SUC m) ∧
+    (∃v. ctree_height (k v) = SOME m) ∧
+    ∀v. ∃j. ctree_height (k v) = SOME j ∧ j ≤ m) ∧
+  (ctree_height (Step t) = SOME n <=> ∃m. n = SUC (SUC m) ∧ ctree_height t = SOME m)
+Proof
+  rw[Guard_def, Step_def, BrS_def, SF DNF_ss] >> metis_tac[LE_REFL]
+QED
+
+Theorem ctree_height_stuck_spin[simp]:
+  ctree_height ctree_stuck = NONE ∧ ctree_height ctree_spin = NONE
+Proof
+  rw[ctree_height_def]
+QED
+
+Theorem ctree_height_1:
+  ctree_height t = SOME 1 <=>
+    (∃r.   t = Tau (Ret r)) ∨
+    (∃e f. t = Vis e (Ret o f)) ∨
+    (∃f.   t = Br (Ret o f))
+Proof
+  Cases_on `t` >> rw[EQ_IMP_THM, FUN_EQ_THM] >> metis_tac[]
+QED
+
+Theorem not_ret_imp_ctree_bind_height_1:
+  (∀r. t ≠ Ret r) ==> ∃(t': ('a, 'b, 'c, 'a + 'b) ctree) k.
+    ctree_height t' = SOME 1 ∧
+    (∀r. t' ≠ Ret r) ∧ t = ctree_bind t' k
+Proof
+  Cases_on `t` >> rw[ctree_height_1, SF DNF_ss]
+  >- (qexists `λv. u` >> rw[])
+  >- (qexistsl [`sum_case g ARB`, `INL`] >> rw[FUN_EQ_THM])
+  >> qexistsl [`sum_case ARB k`, `INR`] >> rw[FUN_EQ_THM]
+QED
+
+
 (* -----------------------------------------------------------------------------------
      2. Bisimulation
    -----------------------------------------------------------------------------------
@@ -1867,7 +2121,6 @@ Theorem ctree_sbisim_stuck[simp] = ctree_sbisim_make_sym_iff ctree_sbisim_stuck_
 
 Theorem ctree_sbisim_not[simp]:
   (¬ctree_sbisim (Ret r) (Tau u)) ∧
-  (¬ctree_sbisim (Ret r) (Vis e g)) ∧
   (¬ctree_sbisim (Tau u) (Ret r)) ∧
   (¬ctree_sbisim (Tau u) (Vis e g)) ∧
   (¬ctree_sbisim (Vis e g) (Ret r)) ∧
@@ -2069,7 +2322,7 @@ QED
    and expand a Br node on the right, which puts us back in the (t, ctree_stuck) case, and finishes
    the proof. Since not every ctree is stuck, this is a contradiction. *)
 Definition bind_rel_def:
-  bind_rel (typ: 'e itself) R p q <=>
+  bind_rel (:'e) R p q <=>
     ctree_sbisim p q ∨ ∃(m: ('a, 'b, 'c, 'e) ctree) m' f f'.
       p = ctree_bind m f ∧ q = ctree_bind m' f' ∧
       ctree_sbisim m m' ∧
@@ -2278,19 +2531,24 @@ Proof
   >> (ctree_sbisim_bind_thm
   |> INST_TYPE [``:'e`` |-> ``:'a + 'b``]
   |> iffRL |> irule)
-  >> qexists `R` >> rw[]
+  >> qexists `R ∪ᵣ bind_rel (:'a + 'b) R` >> reverse (rw[RUNION])
+  >- (dxrule $ iffLR bind_rel_def >> metis_tac[])
   >> `R q p` by gvs[symmetric_def]
-  >> first_assum dxrule >> first_x_assum dxrule
+  >> first_assum dxrule >> first_assum dxrule
   >> rw[] >> rw[ctree_sbisim_sym]
   >> rename1 `ctree_bind n g = ctree_bind m f`
   >> rename1 `ctree_bind n' g' = ctree_bind m' f'`
   >> disj2_tac
-  >> rpt (dxrule not_ret_imp_ctree_bind_not_ret) >> rw[]
+  >> rpt (dxrule not_ret_imp_ctree_bind_height_1) >> rw[]
   >> gvs[ctree_bind_assoc]
   >> irule_at (Pos hd) EQ_REFL
+  >> irule_at (Pos hd) EQ_SYM >> goal_assum $ dxrule_at (Pos hd)
+  >> rw[] >- (
+    
+  )
+
 
 QED
-
 
 (* --- 2.3 - Advanced ctree_sbisim equational theory --- *)
 
