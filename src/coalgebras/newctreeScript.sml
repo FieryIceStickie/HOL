@@ -34,20 +34,6 @@ Proof
   >> Cases_on `P = ∅` >> gvs[MAX_SUC]
 QED
 
-Theorem FINITE_UPPER_BOUNDED:
-  FINITE P <=> ∃m. ∀n. n ∈ P ==> n ≤ m
-Proof
-  rw[EQ_IMP_THM]
-  >- metis_tac[X_LE_MAX_SET]
-  >> first_x_assum mp_tac >> qid_spec_tac `P`
-  >> Induct_on `m` >> rw[]
-  >> irule SUBSET_FINITE_I
-  >- (qexists `{0}` >> rw[SUBSET_DEF])
-  >> qexists `(P DIFF {SUC m}) ∪ {SUC m}` >> rw[SUBSET_DEF]
-  >> first_x_assum irule >> rw[]
-  >> first_x_assum drule >> rw[]
-QED
-
 Theorem DIFF_EMPTY_IMP_EQ:
   s DIFF t = ∅ ∧ t DIFF s = ∅ <=> s = t
 Proof
@@ -81,7 +67,7 @@ Theorem FINITE_SET_OF_SETS_UPPER_BOUNDED:
 Proof
   rw[] >> irule SUBSET_FINITE_I
   >> qexists `POW {k | k ≤ n}`
-  >> rw[FINITE_UPPER_BOUNDED]
+  >> rw[num_FINITE]
   >- metis_tac[]
   >> rw[SUBSET_DEF, IN_POW]
   >> first_x_assum dxrule >> rw[]
@@ -317,7 +303,7 @@ Proof
 QED
 
 Theorem ctree_distinct =
-  ctree_distinct_lemma |> SIMP_RULE std_ss [ALL_DISTINCT, MEM, GSYM CONJ_ASSOC];
+  ctree_distinct_lemma |> SRULE [ALL_DISTINCT, MEM, GSYM CONJ_ASSOC];
 
 (* --- 0.3 - Cases --- *)
 
@@ -848,7 +834,7 @@ val _ = set_mapped_fixity {
   tok = ">>>"
 };
 
-Theorem ctree_compose_thm[simp] = ctree_compose_def |> SIMP_RULE std_ss [FUN_EQ_THM]
+Theorem ctree_compose_thm[simp] = ctree_compose_def |> SRULE [FUN_EQ_THM]
 
 Theorem ctree_compose_o[simp]:
   (f o g) >>> h = (f >>> h) o g
@@ -1035,7 +1021,7 @@ QED
 
 Theorem values_simps[simp] =
   LIST_CONJ [values_pcases, values_combs, values_stuck_spin]
-  |> SIMP_RULE std_ss [GSYM CONJ_ASSOC];
+  |> SRULE [GSYM CONJ_ASSOC];
 
 Theorem values_bind_simp[simp]:
   values (ctree_bind p k) r' <=> ∃r. values p r ∧ values (k r) r'
@@ -1368,7 +1354,7 @@ Proof
   >> rw[] >> gvs[Once ctree_iter_fn_thm]
 QED
 
-Theorem ctree_iter_LRet[simp] = ctree_iter_LRet_lemma |> SIMP_RULE std_ss [];
+Theorem ctree_iter_LRet[simp] = SRULE [] ctree_iter_LRet_lemma;
 
 Definition iter_vars_def:
   iter_vars body = {y | ∃s. INL y ∈ values (body s)}
@@ -1497,7 +1483,7 @@ Definition ctree_bimap_def:
 End
 
 Theorem ctree_bimap_thm[simp] =
-  ctree_bimap_def |> SIMP_RULE std_ss [FUN_EQ_THM, sum_case_def, ctree_compose_thm]
+  ctree_bimap_def |> SRULE [FUN_EQ_THM, sum_case_def, ctree_compose_thm]
 
 Theorem ctree_bind_iter_lemma[local]:
   ∀p q. (∃s.
@@ -1584,7 +1570,7 @@ Proof
     >> rw[MAX_SET_IN_SET]
   )
   >> rw[EXTENSION]
-  >> dxrule_at Concl $ iffRL FINITE_UPPER_BOUNDED >> rw[NOT_LE]
+  >> dxrule_at Concl $ iffRL num_FINITE >> rw[NOT_LE]
   >> metis_tac[ctree_heights_closed_below, LT_IMP_LE]
 QED
 
@@ -1769,6 +1755,8 @@ Inductive ctree_lts:
 [~br:] ctree_lts (k v) l t ==> ctree_lts (Br k) l t
 End
 
+val ctree_lts = ``ctree_lts: ('a, 'b, 'c, 'd) ctree -> ('a, 'c, 'd) ctree_label -> ('a, 'b, 'c, 'd) ctree -> bool``;
+
 Theorem ctree_lts_simps[simp] = ctree_lts_cases |> Q.SPECL [`p`, `l`, `q`] |> cases_to_simp `p`;
 
 Theorem ctree_lts_comb_simps[simp]:
@@ -1946,6 +1934,22 @@ Definition ctree_sbisim_def:
   ctree_sbisim = BISIM_REL ctree_lts
 End
 
+Theorem ctree_bisim_step_thm:
+  ∀R1 R2. R1 ⊆ᵣ BISIM_STEP ctree_lts R2 <=>
+    (∀p q. R1 p q ⇒
+      ∀l. (∀p'. ctree_lts p l p' ⇒ ∃q'. ctree_lts q l q' ∧ R2 p' q') ∧
+           (∀q'. ctree_lts q l q' ⇒ ∃p'. ctree_lts p l p' ∧ R2 p' q'))
+Proof
+  rw[BISIM_STEP_def, RSUBSET] >> metis_tac[]
+QED
+
+Theorem ctree_sim_step_thm:
+  ∀R1 R2. R1 ⊆ᵣ SIM_STEP ctree_lts R2 <=>
+    ∀p q. R1 p q ⇒ ∀l p'. ctree_lts p l p' ⇒ ∃q'. ctree_lts q l q' ∧ R2 p' q'
+Proof
+  rw[SIM_STEP_def, RSUBSET] >> metis_tac[]
+QED
+
 fun spec_lts thm =
   thm
   |> INST_TYPE [
@@ -1953,31 +1957,45 @@ fun spec_lts thm =
     beta |-> ``:('a, 'c, 'd) ctree_label``
   ]
   |> Q.SPEC `ctree_lts`
-  |> SIMP_RULE std_ss [GSYM ctree_sbisim_def];
+  |> SIMP_RULE std_ss [GSYM ctree_sbisim_def, ctree_sim_step_thm, ctree_bisim_step_thm]
 
-Theorem ctree_sbisim_thm:
-  ctree_sbisim p0 q0 <=> ∃R. R p0 q0 ∧
-    (∀p q. R p q ⇒
-      ∀l. (∀p'. ctree_lts p l p' ⇒ ∃q'. ctree_lts q l q' ∧ R p' q') ∧
-           (∀q'. ctree_lts q l q' ⇒ ∃p'. ctree_lts p l p' ∧ R p' q'))
-Proof
-  rw[ctree_sbisim_def, BISIM_REL_def, BISIM_def]
-  >> metis_tac[]
-QED
+Theorem ctree_sbisim_upto_compat_thm = spec_lts BISIM_REL_UPTO_COMPAT_thm;
+Theorem ctree_sbisim_upto_contains_compat_thm = spec_lts BISIM_REL_UPTO_CONTAINS_COMPAT_thm;
+Theorem ctree_sbisim_upto_compat_coind = spec_lts BISIM_REL_UPTO_COMPAT_coind;
+Theorem ctree_sbisim_upto_contains_compat_coind = spec_lts BISIM_REL_UPTO_CONTAINS_COMPAT_coind;
 
-Theorem ctree_sbisim_coind = spec_lts BISIM_REL_coind;
+fun spec_upto thm compat rules =
+  thm
+  |> SRULE [Once $ GSYM AND_IMP_INTRO]
+  |> C MATCH_MP (spec_lts compat)
+  |> SRULE rules;
 
-Theorem ctree_sbisim_strong_thm = spec_lts BISIM_REL_strong_thm;
+fun spec_upto_eqc_strong thm =
+  thm
+  |> Q.SPECL [`BISIM_EXT ctree_lts`, `λR. EQC (R ∪ᵣ ctree_sbisim)`]
+  |> SRULE [Ntimes (GSYM AND_IMP_INTRO) 2]
+  |> C MATCH_MP (spec_lts BISIM_EXT_RSUBSET_EQC_STRONG)
+  |> C MATCH_MP (spec_lts BISIM_COMPAT_EQC_STRONG)
+  |> SRULE [BISIM_EXT_thm, GSYM ctree_sbisim_def]
+  
+Theorem ctree_sbisim_thm = spec_upto ctree_sbisim_upto_compat_thm BISIM_COMPAT_I [];
+Theorem ctree_sbisim_coind = spec_upto ctree_sbisim_upto_compat_coind BISIM_COMPAT_I [];
+Theorem ctree_sbisim_strong_thm = spec_upto ctree_sbisim_upto_compat_thm BISIM_COMPAT_strong [RUNION];
+Theorem ctree_sbisim_strong_coind = spec_upto ctree_sbisim_upto_compat_coind BISIM_COMPAT_strong [RUNION];
+Theorem ctree_sbisim_ext_thm = spec_upto_eqc_strong ctree_sbisim_upto_contains_compat_thm;
+Theorem ctree_sbisim_ext_coind = spec_upto_eqc_strong ctree_sbisim_upto_contains_compat_coind;
 
-Theorem ctree_sbisim_strong_coind = spec_lts BISIM_REL_strong_coind;
+Theorem ctree_sbisim_upto_compat_sym_thm = spec_lts BISIM_REL_UPTO_COMPAT_sym_thm;
+Theorem ctree_sbisim_upto_contains_compat_sym_thm = spec_lts BISIM_REL_UPTO_CONTAINS_COMPAT_sym_thm;
+Theorem ctree_sbisim_upto_compat_sym_coind = spec_lts BISIM_REL_UPTO_COMPAT_sym_coind;
+Theorem ctree_sbisim_upto_contains_compat_sym_coind = spec_lts BISIM_REL_UPTO_CONTAINS_COMPAT_sym_coind;
 
-Theorem ctree_sbisim_sym_thm = spec_lts BISIM_REL_sym_thm;
-
-Theorem ctree_sbisim_sym_coind = spec_lts BISIM_REL_sym_coind;
-
-Theorem ctree_sbisim_sym_strong_thm = spec_lts BISIM_REL_sym_strong_thm;
-
-Theorem ctree_sbisim_sym_strong_coind = spec_lts BISIM_REL_sym_strong_coind;
+Theorem ctree_sbisim_sym_thm = spec_upto ctree_sbisim_upto_compat_sym_thm BISIM_COMPAT_I [];
+Theorem ctree_sbisim_sym_coind = spec_upto ctree_sbisim_upto_compat_sym_coind BISIM_COMPAT_I [];
+Theorem ctree_sbisim_sym_strong_thm = spec_upto ctree_sbisim_upto_compat_sym_thm BISIM_COMPAT_strong [RUNION, Once ctree_sbisim_def];
+Theorem ctree_sbisim_sym_strong_coind = spec_upto ctree_sbisim_upto_compat_sym_coind BISIM_COMPAT_strong [RUNION, Once ctree_sbisim_def];
+Theorem ctree_sbisim_sym_ext_thm = spec_upto_eqc_strong ctree_sbisim_upto_contains_compat_sym_thm;
+Theorem ctree_sbisim_sym_ext_coind = spec_upto_eqc_strong ctree_sbisim_upto_contains_compat_sym_coind;
 
 (* It is almost never necessary to expand ctree_sbisim in the assumptions, since doing so
    would be extremely verbose and annoying to work with. These two theorems should be used
@@ -2007,15 +2025,10 @@ QED
 (* --- 2.2 - Basic ctree_sbisim equational theory --- *)
 
 Theorem ctree_sbisim_equiv[simp] = spec_lts BISIM_REL_IS_EQUIV_REL;
-
 Theorem ctree_sbisim_refl_sym_trans[simp] = MATCH_MP (iffLR equivalence_def) ctree_sbisim_equiv;
-
 Theorem ctree_sbisim_equiv_rules = spec_lts BISIM_REL_EQUIV_rules;
-
 Theorem ctree_sbisim_refl[simp] = cj 1 ctree_sbisim_equiv_rules;
-
 Theorem ctree_sbisim_sym = iffLR $ cj 2 ctree_sbisim_equiv_rules;
-
 Theorem ctree_sbisim_trans = cj 3 ctree_sbisim_equiv_rules;
 
 (* ctree_sbisimᵀ = ctree_sbisim *)
@@ -2043,8 +2056,8 @@ Proof
   metis_tac[ctree_sbisim_sym]
 QED
 
-val ctree_sbisim_make_sym_eq = SIMP_RULE std_ss [Once ctree_sbisim_sym_eq];
-val ctree_sbisim_make_sym_iff = SIMP_RULE std_ss [Once ctree_sbisim_sym_iff];
+val ctree_sbisim_make_sym_eq = SRULE [Once ctree_sbisim_sym_eq];
+val ctree_sbisim_make_sym_iff = SRULE [Once ctree_sbisim_sym_iff];
 
 Theorem ctree_sbisim_ctors[simp]:
   (ctree_sbisim (Ret r) (Ret r') <=> r = r') ∧
@@ -2054,8 +2067,8 @@ Proof
   rpt conj_tac >> (
     eq_tac >> strip_tac
     >- (dxrule ctree_sbisim_lts >> rw[] >> metis_tac[ctree_label_distinct_11])
-    >> irule $ iffRL ctree_sbisim_strong_thm
-    >> irule_at (Pos hd) rel_exact_lemma >> rw[]
+    >> irule ctree_sbisim_strong_thm
+    >> irule_at Any rel_exact_lemma >> rw[]
   )
 QED
 
@@ -2064,8 +2077,8 @@ Theorem ctree_sbisim_br:
   (∀v'. ∃v. ctree_sbisim (k v) (k' v'))
     ==> ctree_sbisim (Br k) (Br k')
 Proof
-  rw[] >> irule $ iffRL ctree_sbisim_strong_thm
-  >> irule_at (Pos hd) rel_exact_lemma >> rw[]
+  rw[] >> irule ctree_sbisim_strong_thm
+  >> irule_at Any rel_exact_lemma >> rw[]
   >> metis_tac[ctree_sbisim_lts_rules]
 QED
 
@@ -2073,7 +2086,7 @@ Theorem ctree_sbisim_guard:
   ctree_sbisim (Guard t) t
 Proof
   rw[Once ctree_sbisim_iff_lts]
-  >> goal_assum $ dxrule_at (Pos hd) >> rw[]
+  >> first_x_assum $ irule_at Any >> rw[]
 QED
 
 Theorem ctree_sbisim_brS[simp]:
@@ -2109,7 +2122,7 @@ Theorem ctree_sbisim_sym_eqs[simp] =
   [ctree_sbisim_guard, ctree_sbisim_step] @ CONJ_LIST 2 ctree_sbisim_funpow
   |> map ctree_sbisim_make_sym_eq
   |> LIST_CONJ
-  |> SIMP_RULE std_ss [GSYM CONJ_ASSOC];
+  |> SRULE [GSYM CONJ_ASSOC];
 
 Theorem ctree_sbisim_stuck_lemma[local]:
   ctree_sbisim t ctree_stuck <=> t = ctree_stuck
@@ -2303,9 +2316,9 @@ Proof
   metis_tac[ctree_sbisim_bind_cong]
 QED
 
-Theorem ctree_sbisim_bind_t = ctree_sbisim_bind |> Q.INST [`k'` |-> `k`] |> SIMP_RULE std_ss [ctree_sbisim_refl];
+Theorem ctree_sbisim_bind_t = ctree_sbisim_bind |> Q.INST [`k'` |-> `k`] |> SRULE [ctree_sbisim_refl];
 
-Theorem ctree_sbisim_bind_k = ctree_sbisim_bind |> Q.INST [`t'` |-> `t`] |> SIMP_RULE std_ss [ctree_sbisim_refl];
+Theorem ctree_sbisim_bind_k = ctree_sbisim_bind |> Q.INST [`t'` |-> `t`] |> SRULE [ctree_sbisim_refl];
 
 Theorem ctree_sbisim_bind_ret:
   ctree_sbisim t (Ret r) ==> ctree_sbisim (ctree_bind t k) (k r)
@@ -2314,7 +2327,97 @@ Proof
   >> metis_tac[ctree_sbisim_bind_t]
 QED
 
-(* --- 2.3 - ctree_sbisim_bind_thm --- *)
+(* --- 2.3 - ctree_head --- *)
+
+Datatype:
+  ACtree_prim = ARet 'r | ATau 'u | AVis 'e 'g
+End
+
+Type ACtree[pp] = ``:('e, 'a -> ('a, 'b, 'e, 'r) ctree, 'r, ('a, 'b, 'e, 'r) ctree) ACtree_prim``
+
+(* Strictly speaking, the 'a and 'e in the returned ctree (not the one in ACtree)
+ will never appear, so we could set them to anything. However, since usually we
+ are binding head immediately, for convenience we set them to the original types.
+ If the usage is to bind the node into a different ctree entirely, then this will run
+ into issues with how bind works wrt the types, and some casting will be required *)
+Definition ctree_head_def:
+  ctree_head (p: ('a, 'b, 'e, 'r) ctree) = (ctree_unfold (λs.
+    case s of
+    | Ret r   => Ret' (ARet r)
+    | Tau u   => Ret' (ATau u)
+    | Vis e g => Ret' (AVis e g)
+    | Br  k   => Br' (λb. (k b))
+  ) p: ('a, 'b, 'e, ('a, 'b, 'e, 'r) ACtree) ctree)
+End
+
+Theorem ctree_head_simps[simp]:
+  (ctree_head (Ret r) = Ret (ARet r)) ∧
+  (ctree_head (Tau u) = Ret (ATau u)) ∧
+  (ctree_head (Vis e g) = Ret (AVis e g)) ∧
+  (ctree_head (Br k) = Br (λv. ctree_head (k v)))
+Proof
+  rw[ctree_head_def]
+QED
+
+Theorem ctree_head_not_tau_vis[simp]:
+  ctree_head p ≠ Tau u ∧
+  ctree_head p ≠ Vis e g
+Proof
+  Cases_on `p` >> rw[ctree_head_def, Once ctree_unfold_thm]
+QED
+
+Theorem ctree_head_comb_simps[simp]:
+  ctree_head (Guard t) = Guard (ctree_head t) ∧
+  ctree_head (Step t) = Guard (Ret (ATau t)) ∧
+  ctree_head (BrS k) = Br (λv. Ret (ATau (k v))) ∧
+  ctree_head ctree_spin = Ret (ATau ctree_spin) ∧
+  ctree_head (LRet s) = Ret (ARet (INL s)) ∧
+  ctree_head (RRet r) = Ret (ARet (INR r))
+Proof
+  rw[Guard_def, Step_def, BrS_def, Once ctree_spin_thm, LRet_def, RRet_def]
+QED
+
+Theorem ctree_head_stuck[simp]:
+  ctree_head ctree_stuck = ctree_stuck
+Proof
+  irule $ iffRL ctree_bisimulation
+  >> irule_at (Pos hd) rel_exact_lemma
+  >> rw[] >> gvs[Once ctree_stuck_thm]
+QED
+  
+Theorem ctree_lts_head_cases:
+  ∀p. ctree_lts (ctree_head p) l q ==>
+    (∃r. ctree_lts p (val r) ctree_stuck ∧ l = val (ARet r) ∧ q = ctree_stuck) ∨
+    (∃u. ctree_lts p tau u ∧ l = val (ATau u) ∧ q = ctree_stuck) ∨
+    (∃e g. (∀a. ctree_lts p (obs e a) (g a)) ∧ l = val (AVis e g) ∧ q = ctree_stuck)
+Proof
+  Induct_on `ctree_lts` >> rw[]
+  >> Cases_on `p` >> gvs[]
+  >> first_x_assum $ resolve_then (Pos hd) mp_tac EQ_REFL
+  >> rw[] >> metis_tac[]
+QED
+
+Theorem ctree_bind_head_stuck_lemma[local]:
+  ∀p q. (∃(u: ('a, 'b, 'c, 'd) ctree).
+    p = ctree_bind (ctree_head u) (λp'. ctree_stuck) ∧
+    q = ctree_stuck
+  ) ==> p = q
+Proof
+  ho_match_mp_tac ctree_bisimulation_coind
+  >> rw[] >> rw[]
+  >> Cases_on `u` >> gvs[]
+  >>~- ([`ctree_head (k' v)`], metis_tac[])
+  >> qexists `ctree_stuck` >> rw[]
+QED
+
+Theorem ctree_bind_head_stuck[simp]:
+  ctree_bind (ctree_head (p: ('a, 'b, 'c, 'd) ctree)) (λp'. ctree_stuck) = ctree_stuck
+Proof
+  irule ctree_bind_head_stuck_lemma >> rw[]
+  >> irule_at Any EQ_REFL
+QED
+
+(* --- 2.4 - ctree_sbisim_bind_thm --- *)
 
 (* Progress is necessary on both sides: if we were to use ``(∀r. m ≠ Ret r ∨ m' ≠ Ret r)``,
    then consider the case ``ctree_sbisim t ctree_stuck``.
@@ -2418,7 +2521,7 @@ Proof
 QED
 
 Theorem bind_rel_lts[local]:
-  R ⊆ᵣ (bind_rel (:'e) R) ∧ bind_rel (:'e) R p q ∧ ctree_lts p l p'
+  R ⊆ᵣ bind_rel (:'e) R ∧ bind_rel (:'e) R p q ∧ ctree_lts p l p'
   ==> ∃q'. ctree_lts q l q' ∧ bind_rel (:'e) R p' q'
 Proof
   rw[] >> dxrule $ iffLR ctree_lts_index_cases >> rw[]
@@ -2452,17 +2555,90 @@ Proof
   >> dxrule_at (Pos (el 3)) ctree_lts_index_rules >> rw[]
   >> dxrule_all ctree_sbisim_lts >> rw[]
   >> irule_at (Pos hd) $ cj 2 ctree_lts_bind_rules
-  >> rpt (goal_assum $ dxrule_at (Pos hd))
+  >> rpt (goal_assum $ dxrule_at Any)
+QED
+
+Theorem bind_rel_compat:
+  BISIM_COMPAT ctree_lts (λR. R ∪ᵣ bind_rel (:'e) R)
+Proof
+
+  rw[BISIM_COMPAT_def, bind_rel_def] >- (
+    `rmonotone (λR. I R ∪ᵣ bind_rel (:'e) R)` suffices_by rw[]
+    >> irule rmonotone_RUNION
+    >> rw[rmonotone_bind_rel]
+  )
+  >> rw[RUNION_RSUBSET]
+  >- rw[BISIM_STEP_MONO, RSUBSET_RUNION, RSUBSET_REFL]
+  >> rw[RSUBSET, ctree_bisim_step_thm, RUNION]
+  >> metis_tac[bind_rel_lts]
+  >- metis_tac[ctree_sbisim_lts_rules]
+  >- metis_tac[ctree_sbisim_lts_rules]
+
+QED
+
+Theorem bind_rel_SIM_STEP:
+  R ⊆ᵣ bind_rel (:'e) R ==> R ⊆ᵣ SIM_STEP ctree_lts (bind_rel (:'e) R)
+Proof
+  rw[ctree_sim_step_thm]
+  >> metis_tac[RSUBSET, bind_rel_lts]
+QED
+
+Theorem RSUBSET_EXT:
+  ∀R1 R2. R1 = R2 <=> (∀R. R ⊆ᵣ R1 <=> R ⊆ᵣ R2)
+Proof
+  rw[EQ_IMP_THM]
+  >> irule RSUBSET_ANTISYM
+  >> metis_tac[RSUBSET_REFL]
+QED
+
+Theorem SIM_STEP_bind_rel:
+  SIM_STEP ctree_lts (bind_rel (:'e) R) = bind_rel (:'e) R
+Proof
+  rw[ctree_sim_step_thm]
+  >> irule $ iffRL RSUBSET_EXT
+  >> rw[EQ_IMP_THM] >- (
+    gvs[RSUBSET, ctree_sim_step_thm]
+    >> rw[]
+    >> first_x_assum dxrule >> rw[]
+  )
 QED
 
 Theorem ctree_sbisim_bind_lemma[local]:
   symmetric R ∧ R p q ∧ R ⊆ᵣ (bind_rel (:'e) R) ==> ctree_sbisim p q
 Proof
-  rw[] >> irule $ iffRL ctree_sbisim_sym_thm
+  rw[] >> irule ctree_sbisim_sym_thm
   >> qexists `bind_rel (:'e) R`
   >> rw[MATCH_MP (iffLR rpreserves_def) rpreserves_symmetric_bind_rel]
   >> metis_tac[RSUBSET, bind_rel_lts]
 QED
+
+Theorem ctree_compat_bind_rel:
+  ∀f. BISIM_COMPAT ctree_lts f ==> ∀R. f (bind_rel (:'e) R) ⊆ᵣ bind_rel (:'e) (f R)
+Proof
+  rw[BISIM_COMPAT_def, RSUBSET, bind_rel_def]
+QED
+
+Theorem bind_rel_upto_compat_thm:
+  ∀f R p: ('a, 'b, 'c, 'd) ctree q.
+    BISIM_COMPAT ^ctree_lts f ∧ 
+    R p q ∧ R ⊆ᵣ bind_rel (:'e) R
+    ==> ctree_sbisim p q
+Proof
+  rw[] >> irule ctree_sbisim_bind_lemma
+  >> qexists `SC (bind_rel (:'e) (f R))`
+  >> rw[SC_SYMMETRIC] >- (
+    gvs[BISIM_COMPAT_def]
+    >> qpat_x_assum `R _ _` mp_tac
+    >> qid_specl_tac [`p`, `q`]
+    >> ho_match_mp_tac $ iffLR RSUBSET
+    >> gvs[SF ETA_ss]
+    >> irule RSUBSET_TRANS
+    >> first_x_assum $ irule_at (Pos hd)
+    >>
+  )
+
+QED
+
 
 Theorem ctree_sbisim_bind_rel_thm:
   ctree_sbisim p0 q0 <=> ∃R. R p0 q0 ∧ R ⊆ᵣ (bind_rel (:'e) (R ∪ᵣ ctree_sbisim))
